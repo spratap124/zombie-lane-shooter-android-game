@@ -16,7 +16,6 @@ class SettingsScreen {
 
     private val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        textSize = 56f
         typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
         textAlign = Paint.Align.CENTER
         setShadowLayer(6f, 3f, 3f, Color.BLACK)
@@ -24,7 +23,6 @@ class SettingsScreen {
 
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        textSize = 32f
         typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
     }
 
@@ -55,18 +53,14 @@ class SettingsScreen {
 
     private val btnTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        textSize = 34f
         typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
         textAlign = Paint.Align.CENTER
     }
 
     private val warnPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#EF9A9A")
-        textSize = 22f
         textAlign = Paint.Align.CENTER
     }
-
-    data class ToggleRow(val label: String, val rect: RectF, val enabled: Boolean)
 
     var toggleRects = mutableListOf<RectF>()
     var resetBtnRect = RectF()
@@ -77,66 +71,70 @@ class SettingsScreen {
         val w = canvas.width.toFloat()
         val h = canvas.height.toFloat()
         val cx = w / 2f
+        val s = w / 1080f
+
+        titlePaint.textSize = 60f * s
+        labelPaint.textSize = 36f * s
+        btnTextPaint.textSize = 36f * s
+        warnPaint.textSize = 26f * s
 
         canvas.drawRect(0f, 0f, w, h, overlayPaint)
 
-        var yPos = safeArea.top + 60f
+        var yPos = safeArea.top + 66f * s
         canvas.drawText("SETTINGS", cx, yPos, titlePaint)
 
-        yPos += 80f
+        yPos += 90f * s
         toggleRects.clear()
 
         val toggles = listOf(
-            ToggleRow("Sound", RectF(), settings.soundEnabled),
-            ToggleRow("Music", RectF(), settings.musicEnabled),
-            ToggleRow("Vibration", RectF(), settings.vibrationEnabled),
-            ToggleRow("Show FPS", RectF(), settings.showFps)
+            "Sound" to settings.soundEnabled,
+            "Music" to settings.musicEnabled,
+            "Vibration" to settings.vibrationEnabled,
+            "Show FPS" to settings.showFps
         )
 
-        val toggleW = 80f
-        val toggleH = 40f
-        val rowH = 70f
-        val leftPad = safeArea.left + 20f
-        val rightPad = safeArea.right - 20f
+        val toggleW = 88f * s
+        val toggleH = 44f * s
+        val rowH = 78f * s
+        val leftPad = safeArea.left + 24f * s
+        val rightPad = safeArea.right - 24f * s
 
-        for (toggle in toggles) {
-            canvas.drawText(toggle.label, leftPad, yPos + 28f, labelPaint)
+        for ((label, enabled) in toggles) {
+            canvas.drawText(label, leftPad, yPos + 32f * s, labelPaint)
 
-            val tRect = RectF(rightPad - toggleW, yPos + 4f, rightPad, yPos + 4f + toggleH)
+            val tRect = RectF(rightPad - toggleW, yPos + 6f * s, rightPad, yPos + 6f * s + toggleH)
             toggleRects.add(tRect)
 
-            val bgPaint = if (toggle.enabled) toggleOnPaint else toggleOffPaint
+            val bgPaint = if (enabled) toggleOnPaint else toggleOffPaint
             canvas.drawRoundRect(tRect, toggleH / 2f, toggleH / 2f, bgPaint)
 
-            val knobX = if (toggle.enabled) tRect.right - toggleH / 2f - 4f else tRect.left + toggleH / 2f + 4f
-            canvas.drawCircle(knobX, tRect.centerY(), toggleH / 2f - 6f, toggleKnobPaint)
+            val knobX = if (enabled) tRect.right - toggleH / 2f - 4f * s else tRect.left + toggleH / 2f + 4f * s
+            canvas.drawCircle(knobX, tRect.centerY(), toggleH / 2f - 6f * s, toggleKnobPaint)
 
             yPos += rowH
         }
 
-        // Reset progress
-        yPos += 30f
+        yPos += 36f * s
         val resetW = safeArea.width() * 0.55f
-        val resetH = 62f
+        val resetH = 68f * s
         resetBtnRect = RectF(cx - resetW / 2f, yPos, cx + resetW / 2f, yPos + resetH)
-        canvas.drawRoundRect(resetBtnRect, 16f, 16f, resetBtnPaint)
+        canvas.drawRoundRect(resetBtnRect, 16f * s, 16f * s, resetBtnPaint)
 
         val resetLabel = if (confirmResetActive) "TAP AGAIN TO CONFIRM" else "RESET PROGRESS"
-        btnTextPaint.textSize = if (confirmResetActive) 26f else 30f
-        canvas.drawText(resetLabel, cx, yPos + 40f, btnTextPaint)
-        btnTextPaint.textSize = 34f
+        btnTextPaint.textSize = if (confirmResetActive) 28f * s else 34f * s
+        canvas.drawText(resetLabel, cx, yPos + resetH * 0.62f, btnTextPaint)
+        btnTextPaint.textSize = 36f * s
 
         if (confirmResetActive) {
-            yPos += resetH + 8f
+            yPos += resetH + 10f * s
             canvas.drawText("This will erase all coins & upgrades!", cx, yPos, warnPaint)
         }
 
-        // Back button
-        yPos += resetH + 40f
+        yPos += resetH + 44f * s
         val backW = safeArea.width() * 0.45f
-        val backH = 62f
+        val backH = 68f * s
         backBtnRect = RectF(cx - backW / 2f, yPos, cx + backW / 2f, yPos + backH)
-        canvas.drawRoundRect(backBtnRect, 16f, 16f, backBtnPaint)
-        canvas.drawText("BACK", cx, yPos + 42f, btnTextPaint)
+        canvas.drawRoundRect(backBtnRect, 16f * s, 16f * s, backBtnPaint)
+        canvas.drawText("BACK", cx, yPos + backH * 0.62f, btnTextPaint)
     }
 }

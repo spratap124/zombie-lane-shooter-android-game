@@ -15,7 +15,6 @@ class PauseScreen {
 
     private val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        textSize = 64f
         typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
         textAlign = Paint.Align.CENTER
         setShadowLayer(6f, 3f, 3f, Color.BLACK)
@@ -38,14 +37,12 @@ class PauseScreen {
 
     private val btnTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
-        textSize = 36f
         typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
         textAlign = Paint.Align.CENTER
     }
 
     private val infoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#78909C")
-        textSize = 28f
         textAlign = Paint.Align.CENTER
     }
 
@@ -57,6 +54,11 @@ class PauseScreen {
         val w = canvas.width.toFloat()
         val h = canvas.height.toFloat()
         val cx = w / 2f
+        val s = w / 1080f
+
+        titlePaint.textSize = 68f * s
+        btnTextPaint.textSize = 40f * s
+        infoPaint.textSize = 32f * s
 
         canvas.drawRect(0f, 0f, w, h, overlayPaint)
 
@@ -64,29 +66,26 @@ class PauseScreen {
 
         canvas.drawText("PAUSED", cx, yPos, titlePaint)
 
-        yPos += 50f
+        yPos += 56f * s
         canvas.drawText("Score: $score   Coins: $sessionCoins", cx, yPos, infoPaint)
 
-        // Resume
-        yPos += 70f
+        yPos += 80f * s
         val btnW = safeArea.width() * 0.6f
-        val btnH = 72f
-        val gap = 24f
+        val btnH = 78f * s
+        val gap = 28f * s
 
         resumeBtnRect = RectF(cx - btnW / 2f, yPos, cx + btnW / 2f, yPos + btnH)
-        canvas.drawRoundRect(resumeBtnRect, 18f, 18f, resumeBtnPaint)
-        canvas.drawText("RESUME", cx, yPos + 48f, btnTextPaint)
+        canvas.drawRoundRect(resumeBtnRect, 18f * s, 18f * s, resumeBtnPaint)
+        canvas.drawText("RESUME", cx, yPos + btnH * 0.64f, btnTextPaint)
 
-        // Settings
         yPos += btnH + gap
         settingsBtnRect = RectF(cx - btnW / 2f, yPos, cx + btnW / 2f, yPos + btnH)
-        canvas.drawRoundRect(settingsBtnRect, 18f, 18f, settingsBtnPaint)
-        canvas.drawText("SETTINGS", cx, yPos + 48f, btnTextPaint)
+        canvas.drawRoundRect(settingsBtnRect, 18f * s, 18f * s, settingsBtnPaint)
+        canvas.drawText("SETTINGS", cx, yPos + btnH * 0.64f, btnTextPaint)
 
-        // Quit
         yPos += btnH + gap
         quitBtnRect = RectF(cx - btnW / 2f, yPos, cx + btnW / 2f, yPos + btnH)
-        canvas.drawRoundRect(quitBtnRect, 18f, 18f, quitBtnPaint)
-        canvas.drawText("QUIT TO MENU", cx, yPos + 48f, btnTextPaint)
+        canvas.drawRoundRect(quitBtnRect, 18f * s, 18f * s, quitBtnPaint)
+        canvas.drawText("QUIT TO MENU", cx, yPos + btnH * 0.64f, btnTextPaint)
     }
 }

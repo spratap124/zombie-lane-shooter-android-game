@@ -10,6 +10,7 @@ import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import com.zombielane.shooter.data.SettingsManager
+import com.zombielane.shooter.data.ShooterManager
 import com.zombielane.shooter.data.UpgradeManager
 import com.zombielane.shooter.objects.*
 import com.zombielane.shooter.ui.*
@@ -43,6 +44,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private val gameOverScreen = GameOverScreen()
     val upgradeManager = UpgradeManager(context)
     val settingsManager = SettingsManager(context)
+    val shooterManager = ShooterManager(context)
 
     var state = GameState.MENU
         private set
@@ -213,15 +215,18 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         comboTracker.update()
 
         handleEvents(now)
+        shooterManager.checkExpiry()
 
+        val shooter = shooterManager.getEquipped()
+        val baseInterval = (shooter.baseFireRateMs - upgradeManager.fireRateReductionMs).coerceAtLeast(20L)
         val fireInterval = if (player.rapidFireUntilMs > now)
-            (upgradeManager.fireIntervalMs / 3).coerceAtLeast(30L)
+            (baseInterval / 3).coerceAtLeast(15L)
         else
-            upgradeManager.fireIntervalMs
+            baseInterval
 
         if (now - lastFireTimeMs >= fireInterval) {
             lastFireTimeMs = now
-            bullets.add(Bullet(player.gunTipX, player.gunTipY, upgradeManager.damage))
+            bullets.addAll(shooterManager.spawnBullets(player.gunTipX, player.gunTipY, upgradeManager.damage))
         }
 
         bullets.forEach { it.update(screenW, screenH) }
@@ -419,7 +424,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         drawBackground(canvas)
 
         when (state) {
-            GameState.MENU -> menuScreen.draw(canvas, safeArea, upgradeManager.highScore, upgradeManager.totalCoins)
+            GameState.MENU -> menuScreen.draw(canvas, safeArea, upgradeManager.highScore, upgradeManager.totalCoins, shooterManager)
             GameState.PLAYING -> drawGameplay(canvas)
             GameState.PAUSED -> { drawGameplay(canvas); pauseScreen.draw(canvas, safeArea, score, sessionCoins) }
             GameState.GAME_OVER -> { drawGameplay(canvas); drawGameOverOverlay(canvas) }
@@ -458,13 +463,16 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         canvas.restore()
 
         if (state == GameState.PLAYING) {
-            hud.drawGameHud(canvas, score, sessionCoins, player.health, player.maxHealth, safeArea, comboTracker, eventManager, settingsManager.showFps, currentFps)
+            val shooter = shooterManager.getEquipped()
+            val tempRemaining = shooterManager.getRemainingTempMs(shooterManager.equipped)
+            val isTemp = !shooterManager.isUnlocked(shooterManager.equipped) && shooterManager.isTemporaryActive(shooterManager.equipped)
+            hud.drawGameHud(canvas, score, sessionCoins, player.health, player.maxHealth, safeArea, comboTracker, eventManager, settingsManager.showFps, currentFps, shooter.name, shooter.bulletColor, if (isTemp) tempRemaining else -1L)
         }
     }
 
     private fun drawGameOverOverlay(canvas: Canvas) {
         val survived = if (gameEndTimeMs > 0) gameEndTimeMs - gameStartTimeMs else 0L
-        gameOverScreen.draw(canvas, safeArea, score, sessionCoins, upgradeManager.totalCoins, maxCombo, enemiesKilled, survived, upgradeManager)
+        gameOverScreen.draw(canvas, safeArea, score, sessionCoins, upgradeManager.totalCoins, maxCombo, enemiesKilled, survived, upgradeManager, shooterManager)
     }
 
     // ── TOUCH ───────────────────────────────────────────────
@@ -486,6 +494,23 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun handleMenuTouch(tx: Float, ty: Float) {
+        // Shooter selection on menu
+        val shooterTypes = com.zombielane.shooter.data.ShooterType.entries
+        for (i in menuScreen.shooterBtnRects.indices) {
+            if (i < shooterTypes.size && menuScreen.shooterBtnRects[i].contains(tx, ty)) {
+                val st = shooterTypes[i]
+                when {
+                    shooterManager.isAvailable(st) -> shooterManager.equip(st)
+                    shooterManager.unlock(st, upgradeManager) -> shooterManager.equip(st)
+                    else -> {
+                        shooterManager.unlockTemporarily(st)
+                        shooterManager.equip(st)
+                    }
+                }
+                return
+            }
+        }
+
         if (menuScreen.playBtnRect.contains(tx, ty)) {
             resetGame()
         } else if (menuScreen.settingsBtnRect.contains(tx, ty)) {
@@ -516,6 +541,29 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun handleGameOverTouch(tx: Float, ty: Float) {
+        // Shooter selection
+        val shooterTypes = com.zombielane.shooter.data.ShooterType.entries
+        for (i in gameOverScreen.shooterBtnRects.indices) {
+            if (i < shooterTypes.size && gameOverScreen.shooterBtnRects[i].contains(tx, ty)) {
+                val st = shooterTypes[i]
+                when {
+                    shooterManager.isAvailable(st) -> shooterManager.equip(st)
+                    shooterManager.unlock(st, upgradeManager) -> shooterManager.equip(st)
+                    else -> {
+                        shooterManager.unlockTemporarily(st)
+                        shooterManager.equip(st)
+                        floatingTexts.add(FloatingText(
+                            tx, ty - 30f,
+                            "FREE TRIAL: 5 MIN",
+                            Color.parseColor("#FFEB3B"),
+                            size = 28f, life = 80
+                        ))
+                    }
+                }
+                return
+            }
+        }
+
         val types = UpgradeManager.UpgradeType.entries
         for (i in gameOverScreen.upgradeBtnRects.indices) {
             if (i < types.size && gameOverScreen.upgradeBtnRects[i].contains(tx, ty)) {
@@ -537,6 +585,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         if (settingsScreen.resetBtnRect.contains(tx, ty)) {
             if (settingsScreen.confirmResetActive) {
                 upgradeManager.resetProgress()
+                shooterManager.resetProgress()
                 settingsScreen.confirmResetActive = false
             } else {
                 settingsScreen.confirmResetActive = true

@@ -44,6 +44,8 @@ class UpgradeManager(context: Context) {
         get() = (BASE_FIRE_INTERVAL_MS - fireRateLevel * FIRE_RATE_REDUCTION_MS)
             .coerceAtLeast(MIN_FIRE_INTERVAL_MS)
 
+    val fireRateReductionMs: Long get() = fireRateLevel * FIRE_RATE_REDUCTION_MS
+
     val maxHealth: Int get() = BASE_MAX_HEALTH + healthLevel * HEALTH_PER_LEVEL
 
     fun upgradeCost(type: UpgradeType): Int {

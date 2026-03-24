@@ -7,12 +7,18 @@ import android.graphics.Paint
 class Bullet(
     x: Float,
     y: Float,
-    val damage: Int = 1
+    val damage: Int = 1,
+    private val vx: Float = 0f,
+    private val vy: Float = -SPEED,
+    bulletColor: Int = Color.parseColor("#FFEB3B"),
+    glowColor: Int = Color.parseColor("#80FFEB3B"),
+    bulletWidth: Float = WIDTH,
+    bulletHeight: Float = HEIGHT
 ) : GameObject(
-    x = x - WIDTH / 2f,
+    x = x - bulletWidth / 2f,
     y = y,
-    width = WIDTH,
-    height = HEIGHT
+    width = bulletWidth,
+    height = bulletHeight
 ) {
 
     companion object {
@@ -22,20 +28,19 @@ class Bullet(
     }
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = if (damage >= 3) Color.parseColor("#FF5722")
-        else Color.parseColor("#FFEB3B")
+        color = bulletColor
         style = Paint.Style.FILL
     }
 
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = if (damage >= 3) Color.parseColor("#80FF5722")
-        else Color.parseColor("#80FFEB3B")
+        color = glowColor
         style = Paint.Style.FILL
     }
 
     override fun update(screenWidth: Int, screenHeight: Int) {
-        y -= SPEED
-        if (y + height < 0) active = false
+        x += vx
+        y += vy
+        if (y + height < 0 || y > screenHeight || x + width < 0 || x > screenWidth) active = false
     }
 
     override fun draw(canvas: Canvas) {
