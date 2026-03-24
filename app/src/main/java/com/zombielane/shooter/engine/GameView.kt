@@ -9,8 +9,10 @@ import android.graphics.RectF
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import com.zombielane.shooter.ads.AdManager
 import com.zombielane.shooter.data.SettingsManager
 import com.zombielane.shooter.data.ShooterManager
+import com.zombielane.shooter.data.ShooterType
 import com.zombielane.shooter.data.UpgradeManager
 import com.zombielane.shooter.objects.*
 import com.zombielane.shooter.ui.*
@@ -45,6 +47,8 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     val upgradeManager = UpgradeManager(context)
     val settingsManager = SettingsManager(context)
     val shooterManager = ShooterManager(context)
+    var adManager: AdManager? = null
+    private var pendingRewardShooterType: ShooterType? = null
 
     var state = GameState.MENU
         private set
@@ -158,8 +162,8 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     fun onBackPressed(): Boolean {
         return when (state) {
-            GameState.PLAYING -> { state = GameState.PAUSED; true }
-            GameState.PAUSED -> { state = GameState.PLAYING; true }
+            GameState.PLAYING -> { state = GameState.PAUSED; post { adManager?.showBanner() }; true }
+            GameState.PAUSED -> { state = GameState.PLAYING; post { adManager?.hideBanner() }; true }
             GameState.SETTINGS -> { state = previousState; settingsScreen.confirmResetActive = false; true }
             GameState.GAME_OVER -> { state = GameState.MENU; true }
             GameState.MENU -> false
@@ -186,6 +190,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         gameEndTimeMs = 0L
         screenShakeFrames = 0
         state = GameState.PLAYING
+        post { adManager?.hideBanner() }
     }
 
     // ── UPDATE ──────────────────────────────────────────────
@@ -402,6 +407,12 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         gameEndTimeMs = System.currentTimeMillis()
         upgradeManager.totalCoins += sessionCoins
         if (score > upgradeManager.highScore) upgradeManager.highScore = score
+
+        adManager?.onPlayerDeath()
+        if (adManager?.shouldShowInterstitial() == true) {
+            post { adManager?.showInterstitial() }
+        }
+        post { adManager?.showBanner() }
     }
 
     private fun spawnDeathParticles(enemy: Enemy) {
@@ -494,18 +505,14 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun handleMenuTouch(tx: Float, ty: Float) {
-        // Shooter selection on menu
-        val shooterTypes = com.zombielane.shooter.data.ShooterType.entries
+        val shooterTypes = ShooterType.entries
         for (i in menuScreen.shooterBtnRects.indices) {
             if (i < shooterTypes.size && menuScreen.shooterBtnRects[i].contains(tx, ty)) {
                 val st = shooterTypes[i]
                 when {
                     shooterManager.isAvailable(st) -> shooterManager.equip(st)
                     shooterManager.unlock(st, upgradeManager) -> shooterManager.equip(st)
-                    else -> {
-                        shooterManager.unlockTemporarily(st)
-                        shooterManager.equip(st)
-                    }
+                    else -> showRewardedForShooter(st)
                 }
                 return
             }
@@ -530,7 +537,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     private fun handlePauseTouch(tx: Float, ty: Float) {
         when {
-            pauseScreen.resumeBtnRect.contains(tx, ty) -> state = GameState.PLAYING
+            pauseScreen.resumeBtnRect.contains(tx, ty) -> { state = GameState.PLAYING; post { adManager?.hideBanner() } }
             pauseScreen.settingsBtnRect.contains(tx, ty) -> {
                 previousState = GameState.PAUSED
                 state = GameState.SETTINGS
@@ -541,24 +548,14 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun handleGameOverTouch(tx: Float, ty: Float) {
-        // Shooter selection
-        val shooterTypes = com.zombielane.shooter.data.ShooterType.entries
+        val shooterTypes = ShooterType.entries
         for (i in gameOverScreen.shooterBtnRects.indices) {
             if (i < shooterTypes.size && gameOverScreen.shooterBtnRects[i].contains(tx, ty)) {
                 val st = shooterTypes[i]
                 when {
                     shooterManager.isAvailable(st) -> shooterManager.equip(st)
                     shooterManager.unlock(st, upgradeManager) -> shooterManager.equip(st)
-                    else -> {
-                        shooterManager.unlockTemporarily(st)
-                        shooterManager.equip(st)
-                        floatingTexts.add(FloatingText(
-                            tx, ty - 30f,
-                            "FREE TRIAL: 5 MIN",
-                            Color.parseColor("#FFEB3B"),
-                            size = 28f, life = 80
-                        ))
-                    }
+                    else -> showRewardedForShooter(st)
                 }
                 return
             }
@@ -597,6 +594,25 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         if (settingsScreen.backBtnRect.contains(tx, ty)) {
             state = previousState
             settingsScreen.confirmResetActive = false
+        }
+    }
+
+    // ── ADS ──────────────────────────────────────────────────
+
+    private fun showRewardedForShooter(type: ShooterType) {
+        val am = adManager ?: return
+        if (!am.isRewardedReady()) return
+        pendingRewardShooterType = type
+        post {
+            am.showRewarded(object : AdManager.RewardListener {
+                override fun onRewardEarned() {
+                    pendingRewardShooterType?.let { st ->
+                        shooterManager.unlockTemporarily(st)
+                        shooterManager.equip(st)
+                        pendingRewardShooterType = null
+                    }
+                }
+            })
         }
     }
 }

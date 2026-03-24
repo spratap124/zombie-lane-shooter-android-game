@@ -28,25 +28,25 @@ data class Shooter(
                 baseFireRateMs = 170L, damageMultiplier = 0.8f,
                 bulletColor = Color.parseColor("#2196F3"),
                 glowColor = Color.parseColor("#802196F3"),
-                unlockCost = 60),
+                unlockCost = 50000),
 
             Shooter(ShooterType.SPREAD, "SPREAD", "Control",
                 baseFireRateMs = 250L, damageMultiplier = 0.65f,
                 bulletColor = Color.parseColor("#4CAF50"),
                 glowColor = Color.parseColor("#804CAF50"),
-                unlockCost = 100),
+                unlockCost = 100000),
 
             Shooter(ShooterType.RAPID, "RAPID", "Chaos",
                 baseFireRateMs = 40L, damageMultiplier = 0.3f,
                 bulletColor = Color.parseColor("#FF9800"),
                 glowColor = Color.parseColor("#80FF9800"),
-                unlockCost = 150),
+                unlockCost = 150000),
 
             Shooter(ShooterType.LASER, "LASER", "Precision",
                 baseFireRateMs = 20L, damageMultiplier = 0.15f,
                 bulletColor = Color.parseColor("#E040FB"),
                 glowColor = Color.parseColor("#80E040FB"),
-                unlockCost = 250)
+                unlockCost = 200000)
         )
 
         fun get(type: ShooterType): Shooter = ALL.first { it.type == type }
