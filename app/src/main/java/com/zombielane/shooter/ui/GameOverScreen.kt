@@ -138,12 +138,11 @@ class GameOverScreen {
 
         canvas.drawRect(0f, 0f, w, h, overlayPaint)
 
-        val sp = (availableH * 0.013f).coerceIn(8f * s, 18f * s)
-        val btnHeight = (availableH * 0.058f).coerceIn(56f * s, 84f * s)
-        val btnGap = (availableH * 0.008f).coerceIn(6f * s, 14f * s)
-        val statBoxH = (availableH * 0.065f).coerceIn(50f * s, 75f * s)
+        val sp = (availableH * 0.018f).coerceIn(12f * s, 24f * s)
+        val btnHeight = (availableH * 0.06f).coerceIn(60f * s, 88f * s)
+        val btnGap = (availableH * 0.012f).coerceIn(10f * s, 18f * s)
+        val statBoxH = (availableH * 0.07f).coerceIn(56f * s, 80f * s)
 
-        // Apply scale to all paint text sizes
         titlePaint.textSize = 72f * s
         scorePaint.textSize = 56f * s
         highScorePaint.textSize = 34f * s
@@ -157,17 +156,17 @@ class GameOverScreen {
         cardStatusPaint.textSize = 17f * s
         cardBorderPaint.strokeWidth = 3f * s
 
-        var yPos = safeArea.top + sp
+        var yPos = safeArea.top + sp * 1.5f
 
         // Title
         canvas.drawText("GAME OVER", cx, yPos + 56f * s, titlePaint)
-        yPos += 56f * s + sp * 2f
+        yPos += 56f * s + sp * 2.5f
 
         // Score
         yPos += 44f * s
         canvas.drawText("$score", cx, yPos, scorePaint)
 
-        yPos += sp + 22f * s
+        yPos += sp * 1.5f + 22f * s
         if (score >= upgradeManager.highScore) {
             highScorePaint.color = Color.parseColor("#FFD600")
             canvas.drawText("NEW HIGH SCORE!", cx, yPos, highScorePaint)
@@ -177,7 +176,7 @@ class GameOverScreen {
         }
 
         // Stats row
-        yPos += sp * 2f + 8f * s
+        yPos += sp * 2.5f + 8f * s
         val statWidth = safeArea.width() / 3f
         val stats = listOf("KILLS" to "$enemiesKilled", "COMBO" to "x$maxCombo", "TIME" to formatTime(timeSurvivedMs))
         val statsTop = yPos
@@ -189,25 +188,25 @@ class GameOverScreen {
         }
 
         // Coins
-        yPos = statsTop + statBoxH + sp + 10f * s
+        yPos = statsTop + statBoxH + sp * 1.8f + 10f * s
         coinPaint.textSize = 32f * s
         canvas.drawText("+$sessionCoins earned", cx, yPos, coinPaint)
-        yPos += sp + 22f * s
+        yPos += sp * 1.5f + 22f * s
         canvas.drawCircle(cx - 60f * s, yPos - 10f * s, 13f * s, coinIconPaint)
         coinPaint.textSize = 36f * s
         canvas.drawText("$totalCoins", cx, yPos, coinPaint)
 
         // ── WEAPONS SECTION ──
-        yPos += sp * 2f + 6f * s
+        yPos += sp * 2.5f + 6f * s
         canvas.drawText("WEAPONS", safeArea.left, yPos, sectionPaint)
-        yPos += 8f * s
+        yPos += 12f * s
         val cardH = (availableH * 0.09f).coerceIn(70f * s, 100f * s)
         drawShooterPanel(canvas, safeArea, yPos, shooterManager, s, cardH)
-        yPos += cardH + sp
+        yPos += cardH + sp * 2f
 
         // ── UPGRADES SECTION ──
         canvas.drawText("UPGRADES", safeArea.left, yPos, sectionPaint)
-        yPos += 8f * s + sp * 0.5f
+        yPos += 12f * s + sp
         val btnWidth = (safeArea.width() * 0.92f).coerceAtMost(w * 0.82f)
 
         upgradeBtnRects.clear()
@@ -238,7 +237,7 @@ class GameOverScreen {
         }
 
         // Action buttons
-        yPos += sp * 0.5f
+        yPos += sp * 1.5f
         val halfW = (safeArea.width() * 0.42f).coerceAtMost(w * 0.38f)
         val actionH = (availableH * 0.055f).coerceIn(52f * s, 72f * s)
 
