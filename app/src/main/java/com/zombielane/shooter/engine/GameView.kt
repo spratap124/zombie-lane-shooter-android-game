@@ -47,8 +47,10 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     val upgradeManager = UpgradeManager(context)
     val settingsManager = SettingsManager(context)
     val shooterManager = ShooterManager(context)
+    private val playerAssets = PlayerAssets(resources)
     var adManager: AdManager? = null
     private var pendingRewardShooterType: ShooterType? = null
+    private var lastEquippedShooter: ShooterType = shooterManager.equipped
 
     var state = GameState.MENU
         private set
@@ -172,6 +174,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     private fun resetGame() {
         player = Player(screenW, screenH, upgradeManager.maxHealth, safeArea)
+        syncPlayerBitmap()
         bullets.clear()
         enemies.clear()
         particles.clear()
@@ -214,6 +217,14 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         }
     }
 
+    private fun syncPlayerBitmap() {
+        val current = shooterManager.equipped
+        if (::player.isInitialized) {
+            player.currentBitmap = playerAssets.get(current)
+        }
+        lastEquippedShooter = current
+    }
+
     private fun updateGame() {
         val now = System.currentTimeMillis()
         player.update(screenW, screenH, safeArea)
@@ -221,6 +232,10 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
         handleEvents(now)
         shooterManager.checkExpiry()
+
+        if (shooterManager.equipped != lastEquippedShooter) {
+            syncPlayerBitmap()
+        }
 
         val shooter = shooterManager.getEquipped()
         val baseInterval = (shooter.baseFireRateMs - upgradeManager.fireRateReductionMs).coerceAtLeast(20L)
@@ -231,7 +246,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
         if (now - lastFireTimeMs >= fireInterval) {
             lastFireTimeMs = now
-            bullets.addAll(shooterManager.spawnBullets(player.gunTipX, player.gunTipY, upgradeManager.damage))
+            bullets.addAll(BulletManager.spawnPattern(shooter, player.gunTipX, player.gunTipY, upgradeManager.damage))
         }
 
         bullets.forEach { it.update(screenW, screenH) }

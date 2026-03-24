@@ -2,9 +2,6 @@ package com.zombielane.shooter.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.zombielane.shooter.objects.Bullet
-import kotlin.math.cos
-import kotlin.math.sin
 
 class ShooterManager(context: Context) {
 
@@ -69,45 +66,6 @@ class ShooterManager(context: Context) {
     fun checkExpiry() {
         if (equipped != ShooterType.BASIC && !isAvailable(equipped)) {
             equipped = ShooterType.BASIC
-        }
-    }
-
-    fun spawnBullets(originX: Float, originY: Float, baseDamage: Int): List<Bullet> {
-        val shooter = getEquipped()
-        val dmg = (baseDamage * shooter.damageMultiplier).toInt().coerceAtLeast(1)
-        val col = shooter.bulletColor
-        val glow = shooter.glowColor
-
-        return when (shooter.type) {
-            ShooterType.BASIC -> listOf(
-                Bullet(originX, originY, dmg, 0f, -Bullet.SPEED, col, glow)
-            )
-
-            ShooterType.DOUBLE -> listOf(
-                Bullet(originX - 12f, originY, dmg, 0f, -Bullet.SPEED, col, glow),
-                Bullet(originX + 12f, originY, dmg, 0f, -Bullet.SPEED, col, glow)
-            )
-
-            ShooterType.SPREAD -> {
-                val angle = Math.toRadians(15.0)
-                val speed = Bullet.SPEED.toDouble()
-                listOf(
-                    Bullet(originX, originY, dmg,
-                        (-sin(angle) * speed).toFloat(), (-cos(angle) * speed).toFloat(), col, glow),
-                    Bullet(originX, originY, dmg, 0f, -Bullet.SPEED, col, glow),
-                    Bullet(originX, originY, dmg,
-                        (sin(angle) * speed).toFloat(), (-cos(angle) * speed).toFloat(), col, glow)
-                )
-            }
-
-            ShooterType.RAPID -> listOf(
-                Bullet(originX, originY, dmg, 0f, -Bullet.SPEED * 1.2f, col, glow)
-            )
-
-            ShooterType.LASER -> listOf(
-                Bullet(originX, originY, dmg, 0f, -Bullet.SPEED * 1.8f, col, glow,
-                    bulletWidth = 3f, bulletHeight = 28f)
-            )
         }
     }
 

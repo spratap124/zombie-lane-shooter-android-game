@@ -32,20 +32,20 @@ data class Shooter(
 
             Shooter(ShooterType.SPREAD, "SPREAD", "Control",
                 baseFireRateMs = 250L, damageMultiplier = 0.65f,
-                bulletColor = Color.parseColor("#4CAF50"),
-                glowColor = Color.parseColor("#804CAF50"),
+                bulletColor = Color.parseColor("#AB47BC"),
+                glowColor = Color.parseColor("#80AB47BC"),
                 unlockCost = 100000),
 
             Shooter(ShooterType.RAPID, "RAPID", "Chaos",
                 baseFireRateMs = 40L, damageMultiplier = 0.3f,
-                bulletColor = Color.parseColor("#FF9800"),
-                glowColor = Color.parseColor("#80FF9800"),
+                bulletColor = Color.parseColor("#FFEB3B"),
+                glowColor = Color.parseColor("#80FFEB3B"),
                 unlockCost = 150000),
 
             Shooter(ShooterType.LASER, "LASER", "Precision",
                 baseFireRateMs = 20L, damageMultiplier = 0.15f,
-                bulletColor = Color.parseColor("#E040FB"),
-                glowColor = Color.parseColor("#80E040FB"),
+                bulletColor = Color.parseColor("#F44336"),
+                glowColor = Color.parseColor("#80F44336"),
                 unlockCost = 200000)
         )
 

@@ -1,10 +1,11 @@
 package com.zombielane.shooter.objects
 
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.Path
 import android.graphics.RectF
+import kotlin.math.abs
 import kotlin.math.sin
 
 class Player(
@@ -32,22 +33,11 @@ class Player(
     var shielded = false
     var rapidFireUntilMs = 0L
 
+    var currentBitmap: Bitmap? = null
+
     private var frameAge = 0
 
-    private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#4CAF50")
-        style = Paint.Style.FILL
-    }
-
-    private val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#388E3C")
-        style = Paint.Style.FILL
-    }
-
-    private val gunPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#757575")
-        style = Paint.Style.FILL
-    }
+    private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
     private val healthBarBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#44FFFFFF")
@@ -70,6 +60,10 @@ class Player(
         strokeWidth = 3f
     }
 
+    private val flamePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+
     val isInvincible: Boolean get() = invincibleFrames > 0
     val isDead: Boolean get() = health <= 0
     val isNearDeath: Boolean get() = health == 1 && maxHealth > 1
@@ -90,7 +84,7 @@ class Player(
         val centerX = x + width / 2f
         val dx = targetX - centerX
 
-        if (kotlin.math.abs(dx) > SPEED) {
+        if (abs(dx) > SPEED) {
             x += if (dx > 0) SPEED else -SPEED
         } else {
             x += dx
@@ -110,9 +104,40 @@ class Player(
 
         val cx = x + width / 2f
 
-        canvas.drawRect(cx - 4f, y - 15f, cx + 4f, y + 10f, gunPaint)
+        drawFlame(canvas, cx)
+        drawJet(canvas)
+        drawShield(canvas, cx)
+        drawHealthBar(canvas)
+    }
 
-        val shipPath = Path().apply {
+    private fun drawFlame(canvas: Canvas, cx: Float) {
+        val flicker = sin(frameAge * 0.5).toFloat() * 4f
+        val flameTop = y + height - 4f
+        val flameH = 14f + flicker
+
+        flamePaint.color = Color.parseColor("#FFEB3B")
+        canvas.drawOval(cx - 10f, flameTop, cx + 10f, flameTop + flameH, flamePaint)
+        flamePaint.color = Color.parseColor("#FF9800")
+        canvas.drawOval(cx - 6f, flameTop + 2f, cx + 6f, flameTop + flameH + 4f, flamePaint)
+    }
+
+    private fun drawJet(canvas: Canvas) {
+        val bmp = currentBitmap
+        if (bmp != null) {
+            val dst = RectF(x, y, x + width, y + height)
+            canvas.drawBitmap(bmp, null, dst, bitmapPaint)
+        } else {
+            drawFallbackShape(canvas)
+        }
+    }
+
+    private fun drawFallbackShape(canvas: Canvas) {
+        val fallbackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#4CAF50")
+            style = Paint.Style.FILL
+        }
+        val cx = x + width / 2f
+        val path = android.graphics.Path().apply {
             moveTo(cx, y)
             lineTo(x + width, y + height * 0.7f)
             lineTo(x + width - 10f, y + height)
@@ -120,23 +145,18 @@ class Player(
             lineTo(x, y + height * 0.7f)
             close()
         }
-        canvas.drawPath(shipPath, bodyPaint)
+        canvas.drawPath(path, fallbackPaint)
+    }
 
-        val cockpitPath = Path().apply {
-            moveTo(cx, y + 15f)
-            lineTo(cx + 15f, y + height * 0.55f)
-            lineTo(cx - 15f, y + height * 0.55f)
-            close()
-        }
-        canvas.drawPath(cockpitPath, accentPaint)
+    private fun drawShield(canvas: Canvas, cx: Float) {
+        if (!shielded) return
+        val pulse = 1f + sin(frameAge * 0.12).toFloat() * 0.05f
+        val shieldR = width * 0.7f * pulse
+        canvas.drawCircle(cx, y + height * 0.4f, shieldR, shieldPaint)
+        canvas.drawCircle(cx, y + height * 0.4f, shieldR, shieldStrokePaint)
+    }
 
-        if (shielded) {
-            val pulse = 1f + sin(frameAge * 0.12).toFloat() * 0.05f
-            val shieldR = width * 0.7f * pulse
-            canvas.drawCircle(cx, y + height * 0.4f, shieldR, shieldPaint)
-            canvas.drawCircle(cx, y + height * 0.4f, shieldR, shieldStrokePaint)
-        }
-
+    private fun drawHealthBar(canvas: Canvas) {
         val barWidth = width + 20f
         val barHeight = 8f
         val barX = x - 10f
