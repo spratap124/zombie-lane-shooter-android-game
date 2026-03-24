@@ -1,0 +1,9 @@
+package com.zombielane.shooter.engine
+
+enum class GameState {
+    MENU,
+    PLAYING,
+    PAUSED,
+    GAME_OVER,
+    SETTINGS
+}

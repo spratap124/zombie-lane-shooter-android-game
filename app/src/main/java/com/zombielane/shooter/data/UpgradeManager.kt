@@ -81,5 +81,9 @@ class UpgradeManager(context: Context) {
         UpgradeType.HEALTH -> "HP ${maxHealth} → ${maxHealth + HEALTH_PER_LEVEL}"
     }
 
+    fun resetProgress() {
+        prefs.edit().clear().apply()
+    }
+
     enum class UpgradeType { DAMAGE, FIRE_RATE, HEALTH }
 }
