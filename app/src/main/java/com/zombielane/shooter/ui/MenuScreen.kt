@@ -5,7 +5,6 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
-import com.zombielane.shooter.data.Shooter
 import com.zombielane.shooter.data.ShooterManager
 import kotlin.math.sin
 
@@ -27,6 +26,11 @@ class MenuScreen {
 
     private val playBtnPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#4CAF50")
+        style = Paint.Style.FILL
+    }
+
+    private val shopBtnPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FF9800")
         style = Paint.Style.FILL
     }
 
@@ -86,32 +90,21 @@ class MenuScreen {
         style = Paint.Style.FILL
     }
 
-    private val sectionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val equippedLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#78909C")
         typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
         textAlign = Paint.Align.CENTER
-        setShadowLayer(2f, 1f, 1f, Color.BLACK)
     }
 
-    private val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val cardBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-    private val cardIconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val cardNamePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val equippedNamePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
         textAlign = Paint.Align.CENTER
     }
-    private val cardTagPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        textAlign = Paint.Align.CENTER
-    }
-    private val cardStatusPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        textAlign = Paint.Align.CENTER
-        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
-    }
 
     var playBtnRect = RectF()
+    var shopBtnRect = RectF()
     var settingsBtnRect = RectF()
-    var shooterBtnRects = mutableListOf<RectF>()
 
     private var frameCount = 0L
 
@@ -125,45 +118,42 @@ class MenuScreen {
         subtitlePaint.textSize = 40f * s
         highScorePaint.textSize = 36f * s
         coinPaint.textSize = 34f * s
-        sectionPaint.textSize = 28f * s
+        equippedLabelPaint.textSize = 26f * s
+        equippedNamePaint.textSize = 34f * s
         btnTextPaint.textSize = 44f * s
         settingsTextPaint.textSize = 38f * s
         infoPaint.textSize = 28f * s
-        cardNamePaint.textSize = 22f * s
-        cardTagPaint.textSize = 17f * s
-        cardStatusPaint.textSize = 18f * s
-        cardBorderPaint.strokeWidth = 3f * s
 
         var yPos = safeArea.top + safeArea.height() * 0.08f
 
-        val mascotSize = 90f * s
+        val mascotSize = 100f * s
         val zombieY = yPos + 10f * s + sin(frameCount * 0.05).toFloat() * 12f * s
         drawZombieMascot(canvas, cx, zombieY, mascotSize)
 
-        yPos += mascotSize + 40f * s
+        yPos += mascotSize + 48f * s
 
         canvas.drawText("ZOMBIE LANE", cx, yPos, titlePaint)
-        yPos += 52f * s
+        yPos += 56f * s
         canvas.drawText("SHOOTER", cx, yPos, subtitlePaint)
 
-        yPos += 58f * s
+        yPos += 68f * s
         if (highScore > 0) {
             canvas.drawText("BEST: $highScore", cx, yPos, highScorePaint)
-            yPos += 40f * s
+            yPos += 44f * s
         }
         canvas.drawCircle(cx - 55f * s, yPos - 10f * s, 14f * s, coinIconPaint)
         canvas.drawText("$totalCoins", cx + 12f * s, yPos, coinPaint)
 
-        yPos += 52f * s
-        canvas.drawText("SELECT WEAPON", cx, yPos, sectionPaint)
-        yPos += 18f * s
-        val cardH = 100f * s
-        drawShooterPanel(canvas, safeArea, yPos, shooterManager, s, cardH)
-        yPos += cardH
+        yPos += 64f * s
+        val equipped = shooterManager.getEquipped()
+        canvas.drawText("EQUIPPED", cx, yPos, equippedLabelPaint)
+        yPos += 36f * s
+        equippedNamePaint.color = equipped.bulletColor
+        canvas.drawText(equipped.name, cx, yPos, equippedNamePaint)
 
-        yPos += 28f * s
+        yPos += 64f * s
         val playW = safeArea.width() * 0.65f
-        val playH = 80f * s
+        val playH = 84f * s
         playBtnRect = RectF(cx - playW / 2f, yPos, cx + playW / 2f, yPos + playH)
 
         val playPulse = 1f + sin(frameCount * 0.06).toFloat() * 0.02f
@@ -174,7 +164,16 @@ class MenuScreen {
         canvas.drawRoundRect(pRect, 20f * s, 20f * s, playBtnPaint)
         canvas.drawText("PLAY", cx, yPos + playH * 0.66f, btnTextPaint)
 
-        yPos += playH + 26f * s
+        yPos += playH + 24f * s
+        val shopW = safeArea.width() * 0.55f
+        val shopH = 72f * s
+        shopBtnRect = RectF(cx - shopW / 2f, yPos, cx + shopW / 2f, yPos + shopH)
+        canvas.drawRoundRect(shopBtnRect, 18f * s, 18f * s, shopBtnPaint)
+        btnTextPaint.textSize = 40f * s
+        canvas.drawText("WEAPONS", cx, yPos + shopH * 0.65f, btnTextPaint)
+        btnTextPaint.textSize = 44f * s
+
+        yPos += shopH + 20f * s
         val settingsW = safeArea.width() * 0.50f
         val settingsH = 66f * s
         settingsBtnRect = RectF(cx - settingsW / 2f, yPos, cx + settingsW / 2f, yPos + settingsH)
@@ -185,75 +184,9 @@ class MenuScreen {
         canvas.drawText("v1.0", cx, footerY, infoPaint)
     }
 
-    private fun drawShooterPanel(canvas: Canvas, safeArea: RectF, topY: Float, shooterManager: ShooterManager, s: Float, cardH: Float) {
-        val allShooters = Shooter.ALL
-        val gap = 8f * s
-        val totalGap = gap * (allShooters.size - 1)
-        val cardW = (safeArea.width() - totalGap) / allShooters.size
-
-        shooterBtnRects.clear()
-
-        for (i in allShooters.indices) {
-            val shooter = allShooters[i]
-            val st = shooter.type
-            val x = safeArea.left + i * (cardW + gap)
-            val rect = RectF(x, topY, x + cardW, topY + cardH)
-            shooterBtnRects.add(rect)
-
-            val isEquipped = shooterManager.equipped == st
-            val isUnlocked = shooterManager.isUnlocked(st)
-            val isTemp = shooterManager.isTemporaryActive(st)
-            val isAvailable = isUnlocked || isTemp
-
-            cardPaint.color = if (isEquipped) Color.parseColor("#33FFFFFF")
-                else if (isAvailable) Color.parseColor("#2A2A4A")
-                else Color.parseColor("#1A1A30")
-            canvas.drawRoundRect(rect, 10f * s, 10f * s, cardPaint)
-
-            if (isEquipped) {
-                cardBorderPaint.color = shooter.bulletColor
-                canvas.drawRoundRect(rect, 10f * s, 10f * s, cardBorderPaint)
-            }
-
-            val ccx = rect.centerX()
-
-            cardIconPaint.color = if (isAvailable) shooter.bulletColor else Color.parseColor("#455A64")
-            canvas.drawCircle(ccx, topY + cardH * 0.2f, 10f * s, cardIconPaint)
-
-            cardNamePaint.color = if (isAvailable) Color.WHITE else Color.parseColor("#607D8B")
-            canvas.drawText(shooter.name, ccx, topY + cardH * 0.46f, cardNamePaint)
-
-            cardTagPaint.color = if (isAvailable) Color.parseColor("#90A4AE") else Color.parseColor("#455A64")
-            canvas.drawText(shooter.tagline, ccx, topY + cardH * 0.62f, cardTagPaint)
-
-            when {
-                isEquipped -> {
-                    cardStatusPaint.color = shooter.bulletColor
-                    canvas.drawText("EQUIPPED", ccx, topY + cardH * 0.86f, cardStatusPaint)
-                }
-                isTemp -> {
-                    val secs = (shooterManager.getRemainingTempMs(st) / 1000).toInt()
-                    val min = secs / 60; val sec = secs % 60
-                    cardStatusPaint.color = Color.parseColor("#FF9800")
-                    canvas.drawText("${min}:${sec.toString().padStart(2, '0')}", ccx, topY + cardH * 0.86f, cardStatusPaint)
-                }
-                isUnlocked -> {
-                    cardStatusPaint.color = Color.parseColor("#4CAF50")
-                    canvas.drawText("SELECT", ccx, topY + cardH * 0.86f, cardStatusPaint)
-                }
-                else -> {
-                    cardStatusPaint.color = Color.parseColor("#FFD600")
-                    canvas.drawText("${shooter.unlockCost}", ccx, topY + cardH * 0.86f, cardStatusPaint)
-                }
-            }
-        }
-    }
-
     private fun drawZombieMascot(canvas: Canvas, cx: Float, y: Float, size: Float) {
         val left = cx - size / 2f
-
         canvas.drawRoundRect(left, y, left + size, y + size, size * 0.15f, size * 0.15f, zombiePaint)
-
         canvas.drawCircle(cx - size * 0.2f, y + size * 0.38f, size * 0.175f, eyePaint)
         canvas.drawCircle(cx + size * 0.2f, y + size * 0.38f, size * 0.175f, eyePaint)
         canvas.drawCircle(cx - size * 0.2f, y + size * 0.40f, size * 0.088f, pupilPaint)

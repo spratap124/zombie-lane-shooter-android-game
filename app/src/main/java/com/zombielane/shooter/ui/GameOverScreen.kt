@@ -5,8 +5,6 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
-import com.zombielane.shooter.data.Shooter
-import com.zombielane.shooter.data.ShooterManager
 import com.zombielane.shooter.data.UpgradeManager
 
 class GameOverScreen {
@@ -92,27 +90,19 @@ class GameOverScreen {
         style = Paint.Style.FILL
     }
 
+    private val shopBtnPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FF9800")
+        style = Paint.Style.FILL
+    }
+
     private val actionTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
         textAlign = Paint.Align.CENTER
     }
 
-    private val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val cardBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-    private val cardNamePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
-        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
-        textAlign = Paint.Align.CENTER
-    }
-    private val cardStatusPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        textAlign = Paint.Align.CENTER
-        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
-    }
-    private val cardIconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-
     var upgradeBtnRects = mutableListOf<RectF>()
-    var shooterBtnRects = mutableListOf<RectF>()
+    var shopBtnRect = RectF()
     var playAgainBtnRect = RectF()
     var menuBtnRect = RectF()
 
@@ -125,15 +115,12 @@ class GameOverScreen {
         maxCombo: Int,
         enemiesKilled: Int,
         timeSurvivedMs: Long,
-        upgradeManager: UpgradeManager,
-        shooterManager: ShooterManager
+        upgradeManager: UpgradeManager
     ) {
         val w = canvas.width.toFloat()
         val h = canvas.height.toFloat()
         val cx = w / 2f
         val availableH = safeArea.height()
-
-        // Scale factor: reference width is 1080px (standard 1080p phone)
         val s = w / 1080f
 
         canvas.drawRect(0f, 0f, w, h, overlayPaint)
@@ -152,17 +139,12 @@ class GameOverScreen {
         btnTextPaint.textSize = 30f * s
         costPaint.textSize = 24f * s
         actionTextPaint.textSize = 38f * s
-        cardNamePaint.textSize = 20f * s
-        cardStatusPaint.textSize = 17f * s
-        cardBorderPaint.strokeWidth = 3f * s
 
         var yPos = safeArea.top + sp * 1.5f
 
-        // Title
         canvas.drawText("GAME OVER", cx, yPos + 56f * s, titlePaint)
         yPos += 56f * s + sp * 2.5f
 
-        // Score
         yPos += 44f * s
         canvas.drawText("$score", cx, yPos, scorePaint)
 
@@ -175,7 +157,6 @@ class GameOverScreen {
             canvas.drawText("Best: ${upgradeManager.highScore}", cx, yPos, highScorePaint)
         }
 
-        // Stats row
         yPos += sp * 2.5f + 8f * s
         val statWidth = safeArea.width() / 3f
         val stats = listOf("KILLS" to "$enemiesKilled", "COMBO" to "x$maxCombo", "TIME" to formatTime(timeSurvivedMs))
@@ -187,7 +168,6 @@ class GameOverScreen {
             canvas.drawText(stats[i].second, sx, statsTop + statBoxH * 0.78f, statValuePaint)
         }
 
-        // Coins
         yPos = statsTop + statBoxH + sp * 1.8f + 10f * s
         coinPaint.textSize = 32f * s
         canvas.drawText("+$sessionCoins earned", cx, yPos, coinPaint)
@@ -196,15 +176,8 @@ class GameOverScreen {
         coinPaint.textSize = 36f * s
         canvas.drawText("$totalCoins", cx, yPos, coinPaint)
 
-        // ── WEAPONS SECTION ──
+        // Upgrades section
         yPos += sp * 2.5f + 6f * s
-        canvas.drawText("WEAPONS", safeArea.left, yPos, sectionPaint)
-        yPos += 12f * s
-        val cardH = (availableH * 0.09f).coerceIn(70f * s, 100f * s)
-        drawShooterPanel(canvas, safeArea, yPos, shooterManager, s, cardH)
-        yPos += cardH + sp * 2f
-
-        // ── UPGRADES SECTION ──
         canvas.drawText("UPGRADES", safeArea.left, yPos, sectionPaint)
         yPos += 12f * s + sp
         val btnWidth = (safeArea.width() * 0.92f).coerceAtMost(w * 0.82f)
@@ -236,8 +209,18 @@ class GameOverScreen {
             yPos += btnHeight + btnGap
         }
 
+        // Weapons shop button
+        yPos += sp
+        val shopW = (safeArea.width() * 0.60f).coerceAtMost(w * 0.55f)
+        val shopH = (availableH * 0.05f).coerceIn(48f * s, 64f * s)
+        shopBtnRect = RectF(cx - shopW / 2f, yPos, cx + shopW / 2f, yPos + shopH)
+        canvas.drawRoundRect(shopBtnRect, 16f * s, 16f * s, shopBtnPaint)
+        actionTextPaint.textSize = 34f * s
+        canvas.drawText("WEAPONS", cx, yPos + shopH * 0.66f, actionTextPaint)
+        actionTextPaint.textSize = 38f * s
+
         // Action buttons
-        yPos += sp * 1.5f
+        yPos += shopH + sp * 1.5f
         val halfW = (safeArea.width() * 0.42f).coerceAtMost(w * 0.38f)
         val actionH = (availableH * 0.055f).coerceIn(52f * s, 72f * s)
 
@@ -248,66 +231,6 @@ class GameOverScreen {
         menuBtnRect = RectF(cx - 8f * s - halfW, yPos, cx - 8f * s, yPos + actionH)
         canvas.drawRoundRect(menuBtnRect, 16f * s, 16f * s, menuBtnPaint)
         canvas.drawText("MENU", menuBtnRect.centerX(), yPos + actionH * 0.66f, actionTextPaint)
-    }
-
-    private fun drawShooterPanel(canvas: Canvas, safeArea: RectF, topY: Float, shooterManager: ShooterManager, s: Float, cardH: Float) {
-        val allShooters = Shooter.ALL
-        val gap = 8f * s
-        val totalGap = gap * (allShooters.size - 1)
-        val cardW = (safeArea.width() - totalGap) / allShooters.size
-
-        shooterBtnRects.clear()
-
-        for (i in allShooters.indices) {
-            val shooter = allShooters[i]
-            val st = shooter.type
-            val x = safeArea.left + i * (cardW + gap)
-            val rect = RectF(x, topY, x + cardW, topY + cardH)
-            shooterBtnRects.add(rect)
-
-            val isEquipped = shooterManager.equipped == st
-            val isUnlocked = shooterManager.isUnlocked(st)
-            val isTemp = shooterManager.isTemporaryActive(st)
-            val isAvailable = isUnlocked || isTemp
-
-            cardPaint.color = if (isAvailable) Color.parseColor("#2A2A4A") else Color.parseColor("#1A1A30")
-            canvas.drawRoundRect(rect, 10f * s, 10f * s, cardPaint)
-
-            if (isEquipped) {
-                cardBorderPaint.color = shooter.bulletColor
-                canvas.drawRoundRect(rect, 10f * s, 10f * s, cardBorderPaint)
-            }
-
-            val ccx = rect.centerX()
-
-            val iconY = topY + cardH * 0.24f
-            cardIconPaint.color = if (isAvailable) shooter.bulletColor else Color.parseColor("#455A64")
-            canvas.drawCircle(ccx, iconY, 10f * s, cardIconPaint)
-
-            cardNamePaint.color = if (isAvailable) Color.WHITE else Color.parseColor("#607D8B")
-            canvas.drawText(shooter.name, ccx, topY + cardH * 0.55f, cardNamePaint)
-
-            when {
-                isEquipped -> {
-                    cardStatusPaint.color = shooter.bulletColor
-                    canvas.drawText("EQUIPPED", ccx, topY + cardH * 0.82f, cardStatusPaint)
-                }
-                isTemp -> {
-                    val secs = (shooterManager.getRemainingTempMs(st) / 1000).toInt()
-                    val min = secs / 60; val sec = secs % 60
-                    cardStatusPaint.color = Color.parseColor("#FF9800")
-                    canvas.drawText("${min}:${sec.toString().padStart(2, '0')}", ccx, topY + cardH * 0.82f, cardStatusPaint)
-                }
-                isUnlocked -> {
-                    cardStatusPaint.color = Color.parseColor("#4CAF50")
-                    canvas.drawText("SELECT", ccx, topY + cardH * 0.82f, cardStatusPaint)
-                }
-                else -> {
-                    cardStatusPaint.color = Color.parseColor("#FFD600")
-                    canvas.drawText("${shooter.unlockCost}", ccx, topY + cardH * 0.82f, cardStatusPaint)
-                }
-            }
-        }
     }
 
     private fun formatTime(ms: Long): String {

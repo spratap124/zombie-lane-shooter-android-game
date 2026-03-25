@@ -44,6 +44,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private val pauseScreen = PauseScreen()
     private val settingsScreen = SettingsScreen()
     private val gameOverScreen = GameOverScreen()
+    private val shopScreen = ShopScreen()
     val upgradeManager = UpgradeManager(context)
     val settingsManager = SettingsManager(context)
     val shooterManager = ShooterManager(context)
@@ -167,6 +168,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             GameState.PLAYING -> { state = GameState.PAUSED; post { adManager?.showBanner() }; true }
             GameState.PAUSED -> { state = GameState.PLAYING; post { adManager?.hideBanner() }; true }
             GameState.SETTINGS -> { state = previousState; settingsScreen.confirmResetActive = false; true }
+            GameState.SHOP -> { state = previousState; true }
             GameState.GAME_OVER -> { state = GameState.MENU; true }
             GameState.MENU -> false
         }
@@ -455,6 +457,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             GameState.PAUSED -> { drawGameplay(canvas); pauseScreen.draw(canvas, safeArea, score, sessionCoins) }
             GameState.GAME_OVER -> { drawGameplay(canvas); drawGameOverOverlay(canvas) }
             GameState.SETTINGS -> settingsScreen.draw(canvas, safeArea, settingsManager)
+            GameState.SHOP -> shopScreen.draw(canvas, safeArea, upgradeManager.totalCoins, shooterManager, playerAssets)
         }
     }
 
@@ -498,7 +501,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     private fun drawGameOverOverlay(canvas: Canvas) {
         val survived = if (gameEndTimeMs > 0) gameEndTimeMs - gameStartTimeMs else 0L
-        gameOverScreen.draw(canvas, safeArea, score, sessionCoins, upgradeManager.totalCoins, maxCombo, enemiesKilled, survived, upgradeManager, shooterManager)
+        gameOverScreen.draw(canvas, safeArea, score, sessionCoins, upgradeManager.totalCoins, maxCombo, enemiesKilled, survived, upgradeManager)
     }
 
     // ── TOUCH ───────────────────────────────────────────────
@@ -515,30 +518,23 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             GameState.PAUSED -> if (event.action == MotionEvent.ACTION_DOWN) handlePauseTouch(tx, ty)
             GameState.GAME_OVER -> if (event.action == MotionEvent.ACTION_DOWN) handleGameOverTouch(tx, ty)
             GameState.SETTINGS -> if (event.action == MotionEvent.ACTION_DOWN) handleSettingsTouch(tx, ty)
+            GameState.SHOP -> if (event.action == MotionEvent.ACTION_DOWN) handleShopTouch(tx, ty)
         }
         return true
     }
 
     private fun handleMenuTouch(tx: Float, ty: Float) {
-        val shooterTypes = ShooterType.entries
-        for (i in menuScreen.shooterBtnRects.indices) {
-            if (i < shooterTypes.size && menuScreen.shooterBtnRects[i].contains(tx, ty)) {
-                val st = shooterTypes[i]
-                when {
-                    shooterManager.isAvailable(st) -> shooterManager.equip(st)
-                    shooterManager.unlock(st, upgradeManager) -> shooterManager.equip(st)
-                    else -> showRewardedForShooter(st)
-                }
-                return
+        when {
+            menuScreen.playBtnRect.contains(tx, ty) -> resetGame()
+            menuScreen.shopBtnRect.contains(tx, ty) -> {
+                previousState = GameState.MENU
+                state = GameState.SHOP
             }
-        }
-
-        if (menuScreen.playBtnRect.contains(tx, ty)) {
-            resetGame()
-        } else if (menuScreen.settingsBtnRect.contains(tx, ty)) {
-            previousState = GameState.MENU
-            state = GameState.SETTINGS
-            settingsScreen.confirmResetActive = false
+            menuScreen.settingsBtnRect.contains(tx, ty) -> {
+                previousState = GameState.MENU
+                state = GameState.SETTINGS
+                settingsScreen.confirmResetActive = false
+            }
         }
     }
 
@@ -563,19 +559,6 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun handleGameOverTouch(tx: Float, ty: Float) {
-        val shooterTypes = ShooterType.entries
-        for (i in gameOverScreen.shooterBtnRects.indices) {
-            if (i < shooterTypes.size && gameOverScreen.shooterBtnRects[i].contains(tx, ty)) {
-                val st = shooterTypes[i]
-                when {
-                    shooterManager.isAvailable(st) -> shooterManager.equip(st)
-                    shooterManager.unlock(st, upgradeManager) -> shooterManager.equip(st)
-                    else -> showRewardedForShooter(st)
-                }
-                return
-            }
-        }
-
         val types = UpgradeManager.UpgradeType.entries
         for (i in gameOverScreen.upgradeBtnRects.indices) {
             if (i < types.size && gameOverScreen.upgradeBtnRects[i].contains(tx, ty)) {
@@ -583,8 +566,14 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 return
             }
         }
-        if (gameOverScreen.playAgainBtnRect.contains(tx, ty)) resetGame()
-        if (gameOverScreen.menuBtnRect.contains(tx, ty)) state = GameState.MENU
+        when {
+            gameOverScreen.shopBtnRect.contains(tx, ty) -> {
+                previousState = GameState.GAME_OVER
+                state = GameState.SHOP
+            }
+            gameOverScreen.playAgainBtnRect.contains(tx, ty) -> resetGame()
+            gameOverScreen.menuBtnRect.contains(tx, ty) -> state = GameState.MENU
+        }
     }
 
     private fun handleSettingsTouch(tx: Float, ty: Float) {
@@ -609,6 +598,25 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         if (settingsScreen.backBtnRect.contains(tx, ty)) {
             state = previousState
             settingsScreen.confirmResetActive = false
+        }
+    }
+
+    private fun handleShopTouch(tx: Float, ty: Float) {
+        val shooterTypes = ShooterType.entries
+        for (i in shopScreen.shooterCardRects.indices) {
+            if (i < shooterTypes.size && shopScreen.shooterCardRects[i].contains(tx, ty)) {
+                val st = shooterTypes[i]
+                when {
+                    shooterManager.isAvailable(st) -> shooterManager.equip(st)
+                    shooterManager.unlock(st, upgradeManager) -> shooterManager.equip(st)
+                    else -> showRewardedForShooter(st)
+                }
+                return
+            }
+        }
+
+        if (shopScreen.backBtnRect.contains(tx, ty)) {
+            state = previousState
         }
     }
 
