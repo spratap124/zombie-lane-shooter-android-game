@@ -78,6 +78,30 @@ class HUD {
         setShadowLayer(3f, 1f, 1f, Color.BLACK)
     }
 
+    private val stageLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#90A4AE")
+        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
+        textAlign = Paint.Align.CENTER
+        setShadowLayer(3f, 1f, 1f, Color.BLACK)
+    }
+
+    private val stageNamePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
+        textAlign = Paint.Align.CENTER
+        setShadowLayer(3f, 1f, 1f, Color.BLACK)
+    }
+
+    private val progressBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#33FFFFFF")
+        style = Paint.Style.FILL
+    }
+
+    private val progressFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#4CAF50")
+        style = Paint.Style.FILL
+    }
+
     var pauseBtnRect = RectF()
 
     fun drawGameHud(
@@ -93,7 +117,10 @@ class HUD {
         fps: Int,
         shooterName: String = "BASIC",
         shooterColor: Int = Color.parseColor("#FFEB3B"),
-        tempRemainingMs: Long = -1L
+        tempRemainingMs: Long = -1L,
+        stageNumber: Int = 1,
+        stageName: String = "",
+        stageProgress: Float = 0f
     ) {
         val left = safeArea.left
         val top = safeArea.top
@@ -139,11 +166,11 @@ class HUD {
             drawHeart(canvas, hx, hy, heartSize, i < playerHealth)
         }
 
-        // Shooter badge (bottom-left)
+        // Shooter badge (top-left, below coins)
         val badgeW = 110f * s
         val badgeH = if (tempRemainingMs > 0) 50f * s else 34f * s
         val badgeX = left
-        val badgeY = safeArea.bottom - badgeH - 30f * s
+        val badgeY = top + 130f * s
         shooterBadgePaint.color = Color.parseColor("#33FFFFFF")
         canvas.drawRoundRect(badgeX, badgeY, badgeX + badgeW, badgeY + badgeH, 8f * s, 8f * s, shooterBadgePaint)
 
@@ -182,8 +209,24 @@ class HUD {
             canvas.drawText(eventManager.bannerText ?: "", w / 2f, bannerY + 34f * s, eventBannerPaint)
         }
 
+        // Stage indicator (top-center, below combo/event area)
+        stageLabelPaint.textSize = 20f * s
+        stageNamePaint.textSize = 18f * s
+        val stageY = top + 100f * s
+        canvas.drawText("STAGE $stageNumber", w / 2f, stageY, stageLabelPaint)
+        if (stageName.isNotEmpty()) {
+            canvas.drawText(stageName, w / 2f, stageY + 18f * s, stageNamePaint)
+        }
+        val barW2 = 140f * s
+        val barH2 = 6f * s
+        val barX2 = w / 2f - barW2 / 2f
+        val barY2 = stageY + 24f * s
+        canvas.drawRoundRect(barX2, barY2, barX2 + barW2, barY2 + barH2, 3f * s, 3f * s, progressBgPaint)
+        progressFillPaint.color = if (stageProgress >= 1f) Color.parseColor("#FFD600") else Color.parseColor("#4CAF50")
+        canvas.drawRoundRect(barX2, barY2, barX2 + barW2 * stageProgress, barY2 + barH2, 3f * s, 3f * s, progressFillPaint)
+
         if (showFps) {
-            canvas.drawText("${fps} FPS", left, safeArea.bottom - 8f * s, fpsPaint)
+            canvas.drawText("${fps} FPS", left, safeArea.bottom - 50f * s, fpsPaint)
         }
     }
 

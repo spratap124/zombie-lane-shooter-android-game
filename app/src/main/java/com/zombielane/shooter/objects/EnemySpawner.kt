@@ -2,6 +2,7 @@ package com.zombielane.shooter.objects
 
 import android.graphics.Color
 import android.graphics.RectF
+import com.zombielane.shooter.engine.Stage
 import kotlin.random.Random
 
 class EnemySpawner {
@@ -9,70 +10,60 @@ class EnemySpawner {
     companion object {
         private const val BASE_INTERVAL = 65
         private const val MIN_INTERVAL = 18
-        private const val BOSS_INTERVAL = 2000
     }
 
     private var frameCounter = 0
     private var spawnInterval = BASE_INTERVAL
-    private var lastBossScore = 0
 
     var speedMultiplier = 1f
     var coinMultiplier = 1
 
-    fun update(screenWidth: Int, score: Int, safeArea: RectF): List<Enemy> {
+    fun update(screenWidth: Int, score: Int, safeArea: RectF, stage: Stage): List<Enemy> {
         val result = mutableListOf<Enemy>()
 
-        // Gentle curve: drops fast early, then flattens out
-        // score  0   → 65 frames (1.08s)
-        // score  200 → 61 frames
-        // score  500 → 55 frames
-        // score  1000 → 45 frames
-        // score  2000 → 35 frames
-        // score  4000 → 25 frames
-        // score  8000 → 18 frames (floor)
-        spawnInterval = (BASE_INTERVAL - score / 50).coerceAtLeast(MIN_INTERVAL)
+        val stageAdjusted = (BASE_INTERVAL * stage.spawnRateMultiplier).toInt()
+        spawnInterval = (stageAdjusted - score / 80).coerceAtLeast(MIN_INTERVAL)
         frameCounter++
 
         if (frameCounter >= spawnInterval) {
             frameCounter = 0
-            result.add(createEnemy(score, safeArea))
-        }
-
-        // Boss every 2000 points, first one at 2000
-        val bossThreshold = (score / BOSS_INTERVAL) * BOSS_INTERVAL
-        if (bossThreshold > 0 && bossThreshold > lastBossScore && score >= bossThreshold) {
-            lastBossScore = bossThreshold
-            result.add(createBoss(safeArea, score))
+            result.add(createEnemy(score, safeArea, stage))
         }
 
         return result
     }
 
-    fun spawnBurst(count: Int, safeArea: RectF, score: Int): List<Enemy> {
-        return List(count) { createEnemy(score, safeArea) }
+    fun spawnBoss(safeArea: RectF, score: Int, stage: Stage): Enemy {
+        return createBoss(safeArea, score, stage)
     }
 
-    private fun createEnemy(score: Int, safeArea: RectF): Enemy {
+    fun spawnBurst(count: Int, safeArea: RectF, score: Int, stage: Stage): List<Enemy> {
+        return List(count) { createEnemy(score, safeArea, stage) }
+    }
+
+    private fun createEnemy(score: Int, safeArea: RectF, stage: Stage): Enemy {
         val spawnWidth = safeArea.width() - Enemy.SIZE
         val x = safeArea.left + Random.nextFloat() * spawnWidth.coerceAtLeast(0f)
 
-        // Tiers unlock gradually
         val tier = when {
             score > 3000 && Random.nextFloat() < 0.20f -> 2
             score > 1200 && Random.nextFloat() < 0.25f -> 1
             else -> 0
         }
 
-        // Special types unlock late, low probability
-        val type = when {
-            score > 800  && Random.nextFloat() < 0.12f -> EnemyType.ZIGZAG
-            score > 2000 && Random.nextFloat() < 0.10f -> EnemyType.FAST
-            score > 3500 && Random.nextFloat() < 0.08f -> EnemyType.SPLITTER
-            else -> EnemyType.NORMAL
+        val allowedTypes = stage.enemyTypes.filter { it != EnemyType.BOSS }
+        val type = if (allowedTypes.size <= 1) {
+            allowedTypes.firstOrNull() ?: EnemyType.NORMAL
+        } else {
+            val roll = Random.nextFloat()
+            when {
+                roll < 0.6f -> allowedTypes.first()
+                roll < 0.85f && allowedTypes.size > 1 -> allowedTypes[1]
+                allowedTypes.size > 2 -> allowedTypes[Random.nextInt(2, allowedTypes.size)]
+                else -> allowedTypes.last()
+            }
         }
 
-        // Very slow start, ramps over a long period
-        // score 0 → 0.0, score 5000 → 0.5, score 15000 → 1.0
         val speedProgression = (score / 15000f).coerceIn(0f, 1f)
         val baseSpeed = when (tier) {
             2 -> 1.2f + speedProgression * 1.8f + Random.nextFloat() * 0.5f
@@ -106,30 +97,39 @@ class EnemySpawner {
         val scoreVal = when (tier) { 2 -> 30; 1 -> 20; else -> 10 }
         val coinVal = (when (tier) { 2 -> 3; 1 -> 2; else -> 1 }) * coinMultiplier
 
+        val canShootInStage = stage.stageNumber >= 7
+        val shoots = canShootInStage && when (type) {
+            EnemyType.ZIGZAG -> Random.nextFloat() < 0.08f
+            else -> false
+        }
+        val interval = 5000L
+
         return Enemy(
             x, -Enemy.SIZE,
-            speed = baseSpeed * typeSpeedMod * speedMultiplier,
+            speed = baseSpeed * typeSpeedMod * speedMultiplier * stage.speedMultiplier,
             scoreValue = scoreVal, coinValue = coinVal,
-            bodyColor = color, health = hp, type = type
+            bodyColor = color, health = hp, type = type,
+            canShoot = shoots, shootInterval = interval
         )
     }
 
-    private fun createBoss(safeArea: RectF, score: Int): Enemy {
+    private fun createBoss(safeArea: RectF, score: Int, stage: Stage): Enemy {
         val x = safeArea.left + (safeArea.width() - Enemy.BOSS_SIZE) / 2f
-        val bossHp = 20 + (score / 2000) * 5
+        val bossHp = 12 + stage.stageNumber * 5
         return Enemy(
             x, -Enemy.BOSS_SIZE,
-            speed = 0.6f * speedMultiplier,
-            scoreValue = 200, coinValue = 15 * coinMultiplier,
+            speed = 0.6f * speedMultiplier * stage.speedMultiplier,
+            scoreValue = 200 + stage.stageNumber * 50,
+            coinValue = (15 + stage.stageNumber * 5) * coinMultiplier,
             bodyColor = Color.parseColor("#B71C1C"),
-            health = bossHp, type = EnemyType.BOSS
+            health = bossHp, type = EnemyType.BOSS,
+            canShoot = stage.stageNumber >= 7, shootInterval = 3600L
         )
     }
 
     fun reset() {
         frameCounter = 0
         spawnInterval = BASE_INTERVAL
-        lastBossScore = 0
         speedMultiplier = 1f
         coinMultiplier = 1
     }

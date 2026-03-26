@@ -14,17 +14,16 @@ import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.google.android.gms.ads.rewarded.RewardedAd
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
+import com.zombielane.shooter.BuildConfig
 
 class AdManager(private val activity: Activity) {
 
     companion object {
         private const val TAG = "AdManager"
 
-        // ---- Google test ad unit IDs ----
-        // Replace these with your real IDs before publishing
-        private const val BANNER_ID = "ca-app-pub-3940256099942544/6300978111"
-        private const val INTERSTITIAL_ID = "ca-app-pub-3940256099942544/1033173712"
-        private const val REWARDED_ID = "ca-app-pub-3940256099942544/5224354917"
+        private val BANNER_ID = BuildConfig.ADMOB_BANNER_ID
+        private val INTERSTITIAL_ID = BuildConfig.ADMOB_INTERSTITIAL_ID
+        private val REWARDED_ID = BuildConfig.ADMOB_REWARDED_ID
 
         private const val DEATHS_PER_INTERSTITIAL = 3
     }

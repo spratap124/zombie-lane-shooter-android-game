@@ -21,8 +21,8 @@ import kotlin.random.Random
 class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
 
     companion object {
-        private const val BG_COLOR = 0xFF1B1B2F.toInt()
         private const val GAME_PADDING = 24f
+        private const val SIDE_PADDING = 48f
         private const val POWER_UP_DROP_CHANCE = 0.12f
         private const val RAPID_FIRE_DURATION_MS = 5000L
     }
@@ -31,6 +31,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private lateinit var player: Player
     private val bullets = mutableListOf<Bullet>()
     private val enemies = mutableListOf<Enemy>()
+    private val enemyBullets = mutableListOf<EnemyBullet>()
     private val particles = mutableListOf<Particle>()
     private val powerUps = mutableListOf<PowerUp>()
     private val floatingTexts = mutableListOf<FloatingText>()
@@ -38,6 +39,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private val enemySpawner = EnemySpawner()
     private val comboTracker = ComboTracker()
     private val eventManager = GameEventManager()
+    private val stageManager = StageManager()
 
     private val hud = HUD()
     private val menuScreen = MenuScreen()
@@ -80,11 +82,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private var insetRight = 0
     private var insetBottom = 0
 
-    private val starPaint = Paint().apply {
-        color = Color.WHITE
-        style = Paint.Style.FILL
-    }
-    private var stars = emptyList<Triple<Float, Float, Float>>()
+    private val backgroundManager = BackgroundManager()
 
     private val nearDeathOverlayPaint = Paint().apply {
         color = Color.parseColor("#18FF0000")
@@ -106,9 +104,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     private fun recalcSafeArea() {
         safeArea.set(
-            insetLeft + GAME_PADDING,
+            insetLeft + SIDE_PADDING,
             insetTop + GAME_PADDING,
-            screenW - insetRight - GAME_PADDING,
+            screenW - insetRight - SIDE_PADDING,
             screenH - insetBottom - GAME_PADDING
         )
     }
@@ -117,14 +115,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         screenW = width
         screenH = height
         recalcSafeArea()
-
-        stars = List(80) {
-            Triple(
-                Random.nextFloat() * screenW,
-                Random.nextFloat() * screenH,
-                1f + Random.nextFloat() * 2.5f
-            )
-        }
+        backgroundManager.init(screenW, screenH)
 
         state = GameState.MENU
         startThread()
@@ -179,6 +170,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         syncPlayerBitmap()
         bullets.clear()
         enemies.clear()
+        enemyBullets.clear()
         particles.clear()
         powerUps.clear()
         floatingTexts.clear()
@@ -186,6 +178,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         enemySpawner.reset()
         comboTracker.reset()
         eventManager.reset()
+        stageManager.reset()
         score = 0
         sessionCoins = 0
         enemiesKilled = 0
@@ -253,19 +246,49 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
         bullets.forEach { it.update(screenW, screenH) }
         enemies.forEach { it.update(screenW, screenH) }
+        enemyBullets.forEach { it.update(screenW, screenH) }
         particles.forEach { it.update(screenW, screenH) }
         powerUps.forEach { it.update(screenW, screenH) }
         floatingTexts.forEach { it.update() }
         coinParticles.forEach { it.update() }
 
-        val spawned = enemySpawner.update(screenW, score, safeArea)
-        enemies.addAll(spawned)
+        for (enemy in enemies) {
+            val spawned = EnemyBulletManager.tryShoot(enemy, player.x + player.width / 2f, player.y, now)
+            enemyBullets.addAll(spawned)
+        }
+
+        val stage = stageManager.currentStage
+
+        val bossActive = stageManager.bossSpawned && !stageManager.bossDefeated
+
+        if (!stageManager.isTransitioning) {
+            if (!bossActive) {
+                val spawned = enemySpawner.update(screenW, score, safeArea, stage)
+                enemies.addAll(spawned)
+            }
+
+            if (stageManager.shouldSpawnBoss()) {
+                enemies.add(enemySpawner.spawnBoss(safeArea, score, stage))
+                stageManager.markBossSpawned()
+                floatingTexts.add(FloatingText(
+                    screenW / 2f, screenH * 0.3f, "STAGE ${stage.stageNumber} BOSS!",
+                    Color.parseColor("#F44336"), size = 52f, life = 90
+                ))
+                screenShakeFrames = 20
+                screenShakeIntensity = 8f
+            }
+        }
 
         checkBulletEnemyCollisions()
+        checkEnemyBulletPlayerCollisions()
         checkPowerUpCollisions()
 
         bullets.removeAll { !it.active }
         enemies.removeAll { !it.active }
+        stageManager.clearStuckBossFightIfNoBossOnField(
+            enemies.any { it.type == EnemyType.BOSS && it.active }
+        )
+        enemyBullets.removeAll { !it.active }
         particles.removeAll { !it.active }
         powerUps.removeAll { !it.active }
         floatingTexts.removeAll { !it.active }
@@ -273,14 +296,32 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
         val reached = enemies.filter { it.y + it.height > player.y }
         for (enemy in reached) {
-            player.takeDamage()
-            spawnDeathParticles(enemy)
-            enemy.active = false
-            screenShakeFrames = 12
-            screenShakeIntensity = 10f
+            if (enemy.type == EnemyType.BOSS) {
+                player.takeDamage()
+                enemy.y = player.y - enemy.height - 20f
+                screenShakeFrames = 12
+                screenShakeIntensity = 10f
+            } else {
+                player.takeDamage()
+                spawnDeathParticles(enemy)
+                enemy.active = false
+                screenShakeFrames = 12
+                screenShakeIntensity = 10f
+            }
         }
 
         if (screenShakeFrames > 0) screenShakeFrames--
+
+        val prevStageNum = stageManager.currentStage.stageNumber
+        stageManager.update()
+        val newStageNum = stageManager.currentStage.stageNumber
+        if (newStageNum != prevStageNum) {
+            val newStage = stageManager.currentStage
+            floatingTexts.add(FloatingText(
+                screenW / 2f, screenH * 0.35f, "STAGE ${newStage.stageNumber}: ${newStage.name}",
+                Color.parseColor("#4CAF50"), size = 50f, life = 120
+            ))
+        }
 
         if (player.isDead) onGameOver()
     }
@@ -294,8 +335,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             else -> { enemySpawner.speedMultiplier = 1f; enemySpawner.coinMultiplier = 1 }
         }
 
-        if (triggered == GameEvent.SWARM) {
-            enemies.addAll(enemySpawner.spawnBurst(8, safeArea, score))
+        val bossUp = stageManager.bossSpawned && !stageManager.bossDefeated
+        if (triggered == GameEvent.SWARM && !bossUp) {
+            enemies.addAll(enemySpawner.spawnBurst(8, safeArea, score, stageManager.currentStage))
             screenShakeFrames = 20
             screenShakeIntensity = 6f
         }
@@ -334,9 +376,27 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         bulletsToRemove.forEach { it.active = false }
     }
 
+    private fun checkEnemyBulletPlayerCollisions() {
+        for (eb in enemyBullets) {
+            if (!eb.active) continue
+            if (eb.collidesWith(player)) {
+                eb.active = false
+                if (player.isInvincible) continue
+                if (player.shielded) {
+                    player.shielded = false
+                    continue
+                }
+                player.takeDamage()
+                screenShakeFrames = 8
+                screenShakeIntensity = 6f
+            }
+        }
+    }
+
     private fun onEnemyKilled(enemy: Enemy) {
         comboTracker.onKill()
         enemiesKilled++
+        stageManager.onEnemyKilled(enemy.type == EnemyType.BOSS)
         if (comboTracker.combo > maxCombo) maxCombo = comboTracker.combo
 
         val comboScore = (enemy.scoreValue * comboTracker.multiplier).toInt()
@@ -462,11 +522,11 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun drawBackground(canvas: Canvas) {
-        canvas.drawColor(BG_COLOR)
-        for ((sx, sy, sr) in stars) {
-            starPaint.alpha = (100 + Random.nextInt(155))
-            canvas.drawCircle(sx, sy, sr, starPaint)
-        }
+        val bgType = if (state == GameState.PLAYING || state == GameState.PAUSED || state == GameState.GAME_OVER)
+            stageManager.currentStage.backgroundType
+        else
+            BackgroundType.SPACE
+        backgroundManager.draw(canvas, bgType)
     }
 
     private fun drawGameplay(canvas: Canvas) {
@@ -477,6 +537,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         canvas.translate(shakeX, shakeY)
 
         bullets.forEach { it.draw(canvas) }
+        enemyBullets.forEach { it.draw(canvas) }
         powerUps.forEach { it.draw(canvas) }
         enemies.forEach { it.draw(canvas) }
         particles.forEach { it.draw(canvas) }
@@ -495,7 +556,8 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             val shooter = shooterManager.getEquipped()
             val tempRemaining = shooterManager.getRemainingTempMs(shooterManager.equipped)
             val isTemp = !shooterManager.isUnlocked(shooterManager.equipped) && shooterManager.isTemporaryActive(shooterManager.equipped)
-            hud.drawGameHud(canvas, score, sessionCoins, player.health, player.maxHealth, safeArea, comboTracker, eventManager, settingsManager.showFps, currentFps, shooter.name, shooter.bulletColor, if (isTemp) tempRemaining else -1L)
+            val stage = stageManager.currentStage
+            hud.drawGameHud(canvas, score, sessionCoins, player.health, player.maxHealth, safeArea, comboTracker, eventManager, settingsManager.showFps, currentFps, shooter.name, shooter.bulletColor, if (isTemp) tempRemaining else -1L, stage.stageNumber, stage.name, stageManager.stageProgress)
         }
     }
 

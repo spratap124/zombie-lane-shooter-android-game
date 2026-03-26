@@ -24,7 +24,9 @@ class Enemy(
     private val bodyColor: Int,
     var health: Int,
     val maxHealth: Int = health,
-    val type: EnemyType = EnemyType.NORMAL
+    val type: EnemyType = EnemyType.NORMAL,
+    val canShoot: Boolean = false,
+    val shootInterval: Long = 2000L
 ) : GameObject(x, y, if (type == EnemyType.BOSS) BOSS_SIZE else SIZE, if (type == EnemyType.BOSS) BOSS_SIZE else SIZE) {
 
     companion object {
@@ -34,6 +36,7 @@ class Enemy(
 
     private var frameAge = 0
     private val spawnX = x
+    var lastShotTimeMs = 0L
 
     private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = bodyColor
@@ -100,7 +103,13 @@ class Enemy(
             }
         }
 
-        if (y > screenHeight) active = false
+        if (y + height > screenHeight) {
+            if (type == EnemyType.BOSS) {
+                y = (screenHeight - height).coerceAtLeast(0f)
+            } else {
+                active = false
+            }
+        }
     }
 
     override fun draw(canvas: Canvas) {
