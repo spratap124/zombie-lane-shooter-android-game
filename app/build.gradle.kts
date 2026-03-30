@@ -43,8 +43,8 @@ android {
         applicationId = "com.zombielane.shooter"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 1
+        versionName = "1.0.0"
 
         // Debug / local: admob.*.id.test in local.properties (see release for production).
         manifestPlaceholders["admobApplicationId"] = admobTestApplicationId

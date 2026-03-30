@@ -3,11 +3,18 @@
 /local.properties
 /.idea
 .DS_Store
-/build
-/app/build
 /captures
 .externalNativeBuild
 .cxx
 local.properties
+
+# Secrets
+keyStore.jks
 *.jks
-/app/release/
+
+# Gradle / Android build outputs (any module)
+build/
+
+# Signing / bundle output folders
+release/
+app/release/

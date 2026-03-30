@@ -10,7 +10,8 @@ class ShooterManager(context: Context) {
         private const val KEY_EQUIPPED = "equipped_shooter"
         private const val KEY_UNLOCKED = "unlocked_shooters"
         private const val TEMP_KEY_PREFIX = "temp_expiry_"
-        const val TEMP_DURATION_MS = 300_000L
+        /** Rewarded-ad temporary weapon access (30 minutes). */
+        const val TEMP_DURATION_MS = 30L * 60 * 1000
     }
 
     private val prefs: SharedPreferences =

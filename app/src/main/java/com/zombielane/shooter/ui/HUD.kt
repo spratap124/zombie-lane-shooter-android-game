@@ -120,7 +120,8 @@ class HUD {
         tempRemainingMs: Long = -1L,
         stageNumber: Int = 1,
         stageName: String = "",
-        stageProgress: Float = 0f
+        stageProgress: Float = 0f,
+        endlessRun: Boolean = false
     ) {
         val left = safeArea.left
         val top = safeArea.top
@@ -213,7 +214,10 @@ class HUD {
         stageLabelPaint.textSize = 20f * s
         stageNamePaint.textSize = 18f * s
         val stageY = top + 100f * s
-        canvas.drawText("STAGE $stageNumber", w / 2f, stageY, stageLabelPaint)
+        canvas.drawText(
+            if (endlessRun) "STAGE $stageNumber · ENDLESS" else "STAGE $stageNumber",
+            w / 2f, stageY, stageLabelPaint
+        )
         if (stageName.isNotEmpty()) {
             canvas.drawText(stageName, w / 2f, stageY + 18f * s, stageNamePaint)
         }

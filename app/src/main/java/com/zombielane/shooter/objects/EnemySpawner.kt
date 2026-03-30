@@ -97,7 +97,7 @@ class EnemySpawner {
         val scoreVal = when (tier) { 2 -> 30; 1 -> 20; else -> 10 }
         val coinVal = (when (tier) { 2 -> 3; 1 -> 2; else -> 1 }) * coinMultiplier
 
-        val canShootInStage = stage.stageNumber >= 7
+        val canShootInStage = stage.stageNumber > Stage.INTRO_STAGE_COUNT
         val shoots = canShootInStage && when (type) {
             EnemyType.ZIGZAG -> Random.nextFloat() < 0.08f
             else -> false
@@ -123,7 +123,7 @@ class EnemySpawner {
             coinValue = (15 + stage.stageNumber * 5) * coinMultiplier,
             bodyColor = Color.parseColor("#B71C1C"),
             health = bossHp, type = EnemyType.BOSS,
-            canShoot = stage.stageNumber >= 7, shootInterval = 3600L
+            canShoot = stage.stageNumber > Stage.INTRO_STAGE_COUNT, shootInterval = 3600L
         )
     }
 

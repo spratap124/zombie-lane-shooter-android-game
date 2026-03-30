@@ -6,5 +6,6 @@ enum class GameState {
     PAUSED,
     GAME_OVER,
     SETTINGS,
-    SHOP
+    SHOP,
+    CHESTS
 }

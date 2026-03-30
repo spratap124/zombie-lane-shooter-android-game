@@ -105,7 +105,6 @@ class GameOverScreen {
     var shopBtnRect = RectF()
     var playAgainBtnRect = RectF()
     var menuBtnRect = RectF()
-
     fun draw(
         canvas: Canvas,
         safeArea: RectF,
@@ -115,7 +114,9 @@ class GameOverScreen {
         maxCombo: Int,
         enemiesKilled: Int,
         timeSurvivedMs: Long,
-        upgradeManager: UpgradeManager
+        upgradeManager: UpgradeManager,
+        chestBanner: String?,
+        chestBannerOk: Boolean
     ) {
         val w = canvas.width.toFloat()
         val h = canvas.height.toFloat()
@@ -176,8 +177,22 @@ class GameOverScreen {
         coinPaint.textSize = 36f * s
         canvas.drawText("$totalCoins", cx, yPos, coinPaint)
 
+        yPos += sp * 2f + 4f * s
+        if (chestBanner != null) {
+            val bannerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = if (chestBannerOk) Color.parseColor("#A5D6A7") else Color.parseColor("#FFAB91")
+                typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
+                textAlign = Paint.Align.CENTER
+                textSize = 24f * s
+            }
+            canvas.drawText(chestBanner, cx, yPos + 20f * s, bannerPaint)
+            yPos += 44f * s
+        } else {
+            yPos += sp * 0.5f
+        }
+
         // Upgrades section
-        yPos += sp * 2.5f + 6f * s
+        yPos += sp * 1.2f + 4f * s
         canvas.drawText("UPGRADES", safeArea.left, yPos, sectionPaint)
         yPos += 12f * s + sp
         val btnWidth = (safeArea.width() * 0.92f).coerceAtMost(w * 0.82f)

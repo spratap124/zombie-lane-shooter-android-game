@@ -20,7 +20,11 @@ data class Stage(
     val backgroundType: BackgroundType,
     val hasBoss: Boolean
 ) {
+    /** Stages after the hand-tuned intro use procedural scaling forever (no final stage). */
+    val isEndlessSector: Boolean get() = stageNumber > Stage.INTRO_STAGE_COUNT
+
     companion object {
+
         val ALL = listOf(
             Stage(1, "Outskirts", killsRequired = 10,
                 enemyTypes = listOf(EnemyType.NORMAL),
@@ -47,18 +51,21 @@ data class Stage(
                 spawnRateMultiplier = 0.68f, speedMultiplier = 1.3f,
                 backgroundType = BackgroundType.LAVA, hasBoss = true),
 
-            Stage(6, "Final Orbit", killsRequired = 45,
+            Stage(6, "Nebula Gate", killsRequired = 45,
                 enemyTypes = listOf(EnemyType.FAST, EnemyType.SPLITTER, EnemyType.ZIGZAG),
                 spawnRateMultiplier = 0.6f, speedMultiplier = 1.4f,
                 backgroundType = BackgroundType.SPACE, hasBoss = true)
         )
 
+        val INTRO_STAGE_COUNT: Int get() = ALL.size
+
+        /** Procedural sectors after [INTRO_STAGE_COUNT]; difficulty scales without a cap. */
         fun getEndless(stageNumber: Int): Stage {
-            val scaling = 1 + (stageNumber - ALL.size) * 0.05f
+            val scaling = 1 + (stageNumber - INTRO_STAGE_COUNT) * 0.05f
             return Stage(
                 stageNumber = stageNumber,
-                name = "Zone $stageNumber",
-                killsRequired = 40 + (stageNumber - ALL.size) * 8,
+                name = "Sector $stageNumber",
+                killsRequired = 40 + (stageNumber - INTRO_STAGE_COUNT) * 8,
                 enemyTypes = listOf(EnemyType.NORMAL, EnemyType.ZIGZAG, EnemyType.FAST, EnemyType.SPLITTER),
                 spawnRateMultiplier = (0.55f / scaling).coerceAtLeast(0.3f),
                 speedMultiplier = (1.4f * scaling).coerceAtMost(2.5f),
@@ -140,7 +147,7 @@ class StageManager {
 
     private fun advanceStage() {
         val nextNum = currentStage.stageNumber + 1
-        currentStage = if (nextNum <= Stage.ALL.size) {
+        currentStage = if (nextNum <= Stage.INTRO_STAGE_COUNT) {
             Stage.ALL[nextNum - 1]
         } else {
             Stage.getEndless(nextNum)
