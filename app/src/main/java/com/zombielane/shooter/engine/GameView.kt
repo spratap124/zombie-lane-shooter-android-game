@@ -53,6 +53,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     private val hud = HUD()
     private val menuScreen = MenuScreen()
+    private val menuUiAssets = MenuUiAssets(resources)
     private val pauseScreen = PauseScreen()
     private val settingsScreen = SettingsScreen()
     private val gameOverScreen = GameOverScreen()
@@ -581,17 +582,21 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     override fun draw(canvas: Canvas) {
         super.draw(canvas)
 
-        drawBackground(canvas)
+        if (state != GameState.MENU) {
+            drawBackground(canvas)
+        }
 
         when (state) {
             GameState.MENU -> {
-                val toast = if (System.currentTimeMillis() < chestToastUntilMs) chestToastText else null
+                val nowMs = System.currentTimeMillis()
+                val toast = if (nowMs < chestToastUntilMs) chestToastText else null
                 val pop = streakPopup
                 menuScreen.draw(
                     canvas, safeArea, upgradeManager.highScore, upgradeManager.totalCoins, shooterManager,
-                    chestManager.filledCount(), ChestManager.MAX_SLOTS, streakManager.currentStreak(), toast,
+                    playerAssets, menuUiAssets, chestManager.getSlots(nowMs), streakManager.currentStreak(), toast,
                     if (pop != null) pop.title else null,
-                    if (pop != null) pop.message else null
+                    if (pop != null) pop.message else null,
+                    nowMs
                 )
             }
             GameState.CHESTS -> {
