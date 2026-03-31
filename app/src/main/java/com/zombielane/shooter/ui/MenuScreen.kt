@@ -163,8 +163,42 @@ class MenuScreen {
         style = Paint.Style.FILL
     }
 
+    private val streakPopFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+
+    private val streakPopBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        color = Color.parseColor("#FFCA28")
+    }
+
+    private val streakPopOuterGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        color = Color.parseColor("#00E5FF")
+    }
+
+    private val streakSparklePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        isFilterBitmap = true
+    }
+
+    private val streakEmojiPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+    }
+
+    private val streakRibbonPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+
     private val popOkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#00C853")
+        style = Paint.Style.FILL
+    }
+
+    private val popOkStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        color = Color.parseColor("#E8F5E9")
+    }
+
+    private val popOkShadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#40000000")
         style = Paint.Style.FILL
     }
 
@@ -484,32 +518,158 @@ class MenuScreen {
 
         streakOkRect.setEmpty()
         if (streakPopupTitle != null && streakPopupMessage != null) {
-            canvas.drawRect(0f, 0f, w, h, dimOverlayPaint)
-            val pw = safeArea.width() * 0.88f
-            val ph = 220f * s
-            val px = cx - pw / 2f
-            val py = safeArea.top + safeArea.height() * 0.28f
-            tmpRect.set(px, py, px + pw, py + ph)
-            canvas.drawRoundRect(tmpRect, 20f * s, 20f * s, popCardPaint)
-            titlePaint.textSize = 32f * s
-            titlePaint.color = Color.parseColor("#FFD600")
-            titlePaint.setShadowLayer(8f, 0f, 0f, Color.BLACK)
-            canvas.drawText(streakPopupTitle, cx, py + 48f * s, titlePaint)
-            titlePaint.clearShadowLayer()
-            streakBodyPaint.textSize = 24f * s
-            val words = streakPopupMessage.chunked(36)
-            var ty = py + 92f * s
-            for (line in words.take(4)) {
-                canvas.drawText(line, cx, ty, streakBodyPaint)
-                ty += 30f * s
-            }
-            val okW = pw * 0.45f
-            val okH = 48f * s
-            streakOkRect = RectF(cx - okW / 2f, py + ph - okH - 20f * s, cx + okW / 2f, py + ph - 20f * s)
-            canvas.drawRoundRect(streakOkRect, 12f * s, 12f * s, popOkPaint)
-            btnTextPaint.textSize = 26f * s
-            canvas.drawText("OK", cx, streakOkRect.centerY() + 9f * s, btnTextPaint)
+            drawStreakRewardPopup(
+                canvas, w, h, cx, s, safeArea, streakPopupTitle, streakPopupMessage, nowMs
+            )
         }
+    }
+
+    private fun drawStreakRewardPopup(
+        canvas: Canvas,
+        w: Float,
+        h: Float,
+        cx: Float,
+        s: Float,
+        safeArea: RectF,
+        streakPopupTitle: String,
+        streakPopupMessage: String,
+        nowMs: Long
+    ) {
+        val pulse = (sin(nowMs * 0.004).toFloat() * 0.5f + 0.5f)
+        val pulse2 = (sin(nowMs * 0.003 + 1.2f).toFloat() * 0.5f + 0.5f)
+
+        val vignette = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = RadialGradient(
+                cx, safeArea.top + safeArea.height() * 0.42f,
+                w * 0.85f,
+                Color.parseColor("#88101028"),
+                Color.parseColor("#F0101018"),
+                Shader.TileMode.CLAMP
+            )
+        }
+        canvas.drawRect(0f, 0f, w, h, dimOverlayPaint)
+        canvas.drawRect(0f, 0f, w, h, vignette)
+
+        val pw = safeArea.width() * 0.88f
+        val ph = 288f * s
+        val px = cx - pw / 2f
+        val py = safeArea.top + safeArea.height() * 0.22f
+        val r = 22f * s
+
+        tmpRect.set(px, py, px + pw, py + ph)
+
+        streakPopOuterGlowPaint.strokeWidth = (10f + pulse * 4f) * s
+        streakPopOuterGlowPaint.alpha = (35 + pulse * 50).toInt().coerceIn(0, 255)
+        tmpRect2.set(px - 10f * s, py - 10f * s, px + pw + 10f * s, py + ph + 10f * s)
+        canvas.drawRoundRect(tmpRect2, r + 8f * s, r + 8f * s, streakPopOuterGlowPaint)
+        streakPopOuterGlowPaint.alpha = 255
+
+        streakPopFillPaint.shader = LinearGradient(
+            px, py, px + pw, py + ph,
+            intArrayOf(
+                Color.parseColor("#3D2B7A"),
+                Color.parseColor("#1B2638"),
+                Color.parseColor("#0D1520")
+            ),
+            floatArrayOf(0f, 0.45f, 1f),
+            Shader.TileMode.CLAMP
+        )
+        canvas.drawRoundRect(tmpRect, r, r, streakPopFillPaint)
+        streakPopFillPaint.shader = null
+
+        streakRibbonPaint.shader = LinearGradient(
+            px, py, px + pw, py + 56f * s,
+            Color.parseColor("#66FFCA28"),
+            Color.parseColor("#00FFCA28"),
+            Shader.TileMode.CLAMP
+        )
+        tmpRect2.set(px + 8f * s, py + 8f * s, px + pw - 8f * s, py + 44f * s)
+        canvas.drawRoundRect(tmpRect2, 14f * s, 14f * s, streakRibbonPaint)
+        streakRibbonPaint.shader = null
+
+        streakPopBorderPaint.strokeWidth = (3f + pulse2 * 0.8f) * s
+        canvas.drawRoundRect(tmpRect, r, r, streakPopBorderPaint)
+
+        val sparkles = listOf(
+            Triple(px + pw * 0.12f, py + ph * 0.18f, 4f),
+            Triple(px + pw * 0.88f, py + ph * 0.22f, 5f),
+            Triple(px + pw * 0.08f, py + ph * 0.55f, 3.5f),
+            Triple(px + pw * 0.92f, py + ph * 0.62f, 4f),
+            Triple(px + pw * 0.18f, py + ph * 0.88f, 3f),
+            Triple(px + pw * 0.82f, py + ph * 0.85f, 4.5f)
+        )
+        for ((i, t) in sparkles.withIndex()) {
+            val tw = t.third * s
+            val a = (80 + pulse * 120 + (i * 23) % 40).toInt().coerceIn(40, 255)
+            streakSparklePaint.color = Color.argb(a, 255, 236, 150)
+            canvas.drawCircle(t.first, t.second, tw, streakSparklePaint)
+            streakSparklePaint.color = Color.argb(a / 2, 255, 255, 255)
+            canvas.drawCircle(t.first - tw * 0.3f, t.second - tw * 0.3f, tw * 0.35f, streakSparklePaint)
+        }
+
+        streakEmojiPaint.textSize = 52f * s
+        streakEmojiPaint.setShadowLayer(12f * s, 0f, 4f * s, Color.parseColor("#80000000"))
+        canvas.drawText("🎁", cx, py + 58f * s, streakEmojiPaint)
+        streakEmojiPaint.clearShadowLayer()
+
+        titlePaint.textSize = 34f * s
+        titlePaint.typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
+        titlePaint.textAlign = Paint.Align.CENTER
+        titlePaint.shader = LinearGradient(
+            cx - pw * 0.4f, py + 100f * s, cx + pw * 0.4f, py + 100f * s,
+            intArrayOf(
+                Color.parseColor("#FFEA00"),
+                Color.parseColor("#FFAB00"),
+                Color.parseColor("#FFEA00")
+            ),
+            floatArrayOf(0f, 0.5f, 1f),
+            Shader.TileMode.CLAMP
+        )
+        titlePaint.setShadowLayer(10f * s, 0f, 2f * s, Color.parseColor("#C0000000"))
+        canvas.drawText(streakPopupTitle, cx, py + 104f * s, titlePaint)
+        titlePaint.clearShadowLayer()
+        titlePaint.shader = null
+
+        streakBodyPaint.textSize = 23f * s
+        streakBodyPaint.color = Color.parseColor("#ECEFF1")
+        streakBodyPaint.setShadowLayer(3f * s, 0f, 1f * s, Color.parseColor("#80000000"))
+        val words = streakPopupMessage.chunked(34)
+        var ty = py + 148f * s
+        for (line in words.take(4)) {
+            canvas.drawText(line, cx, ty, streakBodyPaint)
+            ty += 32f * s
+        }
+        streakBodyPaint.clearShadowLayer()
+
+        val okW = pw * 0.62f
+        val okH = 54f * s
+        streakOkRect = RectF(cx - okW / 2f, py + ph - okH - 22f * s, cx + okW / 2f, py + ph - 22f * s)
+        tmpRect2.set(
+            streakOkRect.left + 3f * s,
+            streakOkRect.bottom + 2f * s,
+            streakOkRect.right - 3f * s,
+            streakOkRect.bottom + 8f * s
+        )
+        canvas.drawRoundRect(tmpRect2, 8f * s, 8f * s, popOkShadowPaint)
+
+        popOkPaint.shader = LinearGradient(
+            streakOkRect.left, streakOkRect.top,
+            streakOkRect.left, streakOkRect.bottom,
+            Color.parseColor("#76FF03"),
+            Color.parseColor("#00C853"),
+            Shader.TileMode.CLAMP
+        )
+        canvas.drawRoundRect(streakOkRect, 16f * s, 16f * s, popOkPaint)
+        popOkPaint.shader = null
+
+        popOkStrokePaint.strokeWidth = 2.5f * s
+        canvas.drawRoundRect(streakOkRect, 16f * s, 16f * s, popOkStrokePaint)
+
+        btnTextPaint.textSize = 28f * s
+        btnTextPaint.color = Color.WHITE
+        btnTextPaint.setShadowLayer(4f * s, 0f, 2f * s, Color.parseColor("#60000000"))
+        canvas.drawText("AWESOME!", cx, streakOkRect.centerY() + 10f * s, btnTextPaint)
+        btnTextPaint.clearShadowLayer()
     }
 
     /** Uniform scale to cover the canvas; centers crop (same idea as ImageView centerCrop). */

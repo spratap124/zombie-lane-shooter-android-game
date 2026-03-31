@@ -27,6 +27,7 @@ import com.zombielane.shooter.data.UpgradeManager
 import com.zombielane.shooter.objects.*
 import com.zombielane.shooter.ui.*
 import kotlin.jvm.Volatile
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
@@ -36,6 +37,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         private const val SIDE_PADDING = 48f
         private const val POWER_UP_DROP_CHANCE = 0.12f
         private const val RAPID_FIRE_DURATION_MS = 5000L
+        private const val GAME_OVER_COIN_ANIM_MS = 750L
     }
 
     private var gameThread: GameThread? = null
@@ -93,6 +95,20 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     @Volatile
     private var pendingReviveAfterReward = false
 
+    @Volatile
+    private var pendingGameOverDoubleCoins = false
+
+    /** Session coins banked at game over (before optional ×2 ad). */
+    private var gameOverEarnedCoins = 0
+    @Volatile
+    private var gameOverDoubleCoinsUsed = false
+    @Volatile
+    private var gameOverDoubleAdInFlight = false
+
+    private var gameOverCoinAnimStartMs = 0L
+    private var gameOverCoinAnimFrom = 0
+    private var gameOverCoinAnimTo = 0
+
     var state = GameState.MENU
         private set
     private var previousState = GameState.MENU
@@ -148,6 +164,13 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             screenW - insetRight - SIDE_PADDING,
             screenH - insetBottom - GAME_PADDING
         )
+    }
+
+    /** Keeps [x] inside the horizontal play lane; [coerceIn] throws if the lane is narrower than [width]. */
+    private fun clampXIntoPlayfieldLane(x: Float, width: Float): Float {
+        val minX = safeArea.left
+        val maxX = (safeArea.right - width).coerceAtLeast(minX)
+        return x.coerceIn(minX, maxX)
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
@@ -252,6 +275,11 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         gameOverChestBanner = null
         hasUsedContinue = false
         pendingReviveAfterReward = false
+        gameOverEarnedCoins = 0
+        gameOverDoubleCoinsUsed = false
+        gameOverDoubleAdInFlight = false
+        pendingGameOverDoubleCoins = false
+        gameOverCoinAnimStartMs = 0L
         post { adManager?.hideBanner() }
     }
 
@@ -269,8 +297,52 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 }
             }
             GameState.CHESTS -> updateChestRevealAnimation(System.currentTimeMillis())
+            GameState.GAME_OVER -> updateGameOverScreen()
             else -> {}
         }
+    }
+
+    private fun updateGameOverScreen() {
+        if (pendingGameOverDoubleCoins) {
+            pendingGameOverDoubleCoins = false
+            applyGameOverDoubleCoinReward()
+        }
+        val now = System.currentTimeMillis()
+        if (gameOverCoinAnimStartMs > 0L && now >= gameOverCoinAnimStartMs + GAME_OVER_COIN_ANIM_MS) {
+            gameOverCoinAnimStartMs = 0L
+        }
+        floatingTexts.forEach { it.update() }
+    }
+
+    private fun applyGameOverDoubleCoinReward() {
+        if (gameOverDoubleCoinsUsed || gameOverEarnedCoins <= 0) return
+        gameOverDoubleCoinsUsed = true
+        val from = upgradeManager.totalCoins
+        upgradeManager.totalCoins += gameOverEarnedCoins
+        val to = upgradeManager.totalCoins
+        gameOverCoinAnimFrom = from
+        gameOverCoinAnimTo = to
+        gameOverCoinAnimStartMs = System.currentTimeMillis()
+        floatingTexts.add(
+            FloatingText(
+                screenW / 2f,
+                safeArea.top + safeArea.height() * 0.38f,
+                "+${gameOverEarnedCoins} coins",
+                Color.parseColor("#FFD600"),
+                size = 44f,
+                life = 60
+            )
+        )
+    }
+
+    private fun gameOverDisplayedTotalCoins(): Int {
+        val start = gameOverCoinAnimStartMs
+        if (start <= 0L) return upgradeManager.totalCoins
+        val now = System.currentTimeMillis()
+        val t = ((now - start).toFloat() / GAME_OVER_COIN_ANIM_MS.toFloat()).coerceIn(0f, 1f)
+        val smooth = t * t * (3f - 2f * t)
+        return (gameOverCoinAnimFrom + (gameOverCoinAnimTo - gameOverCoinAnimFrom) * smooth).roundToInt()
+            .coerceIn(gameOverCoinAnimFrom, gameOverCoinAnimTo)
     }
 
     private fun updateFps() {
@@ -443,10 +515,12 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     private fun checkBulletEnemyCollisions() {
         val bulletsToRemove = mutableSetOf<Bullet>()
+        // Snapshot: onEnemyKilled (e.g. SPLITTER) mutates [enemies]; iterating the live list causes CME.
+        val enemiesSnapshot = enemies.toList()
 
         for (bullet in bullets) {
             if (!bullet.active) continue
-            for (enemy in enemies) {
+            for (enemy in enemiesSnapshot) {
                 if (!enemy.active) continue
                 if (bullet.collidesWith(enemy)) {
                     bulletsToRemove.add(bullet)
@@ -524,7 +598,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             for (off in listOf(-30f, 30f)) {
                 enemies.add(
                     Enemy(
-                        (enemy.x + enemy.width / 2f + off).coerceIn(safeArea.left, safeArea.right - Enemy.SIZE),
+                        clampXIntoPlayfieldLane(enemy.x + enemy.width / 2f + off, Enemy.SIZE),
                         enemy.y, speed = 1.5f + Random.nextFloat() * 0.8f,
                         scoreValue = 5, coinValue = 1,
                         bodyColor = Color.parseColor("#CE93D8"), health = 1, type = EnemyType.FAST
@@ -584,7 +658,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private fun applyContinueRevival() {
         if (state != GameState.CONTINUE_OFFER) return
         hasUsedContinue = true
-        player.x = continueSavedPlayerX.coerceIn(safeArea.left, safeArea.right - player.width)
+        player.x = clampXIntoPlayfieldLane(continueSavedPlayerX, player.width)
         player.y = continueSavedPlayerY
         player.targetX = continueSavedTargetX
         player.health = 1
@@ -638,6 +712,12 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private fun finalizeGameOver() {
         state = GameState.GAME_OVER
         gameEndTimeMs = System.currentTimeMillis()
+        gameOverEarnedCoins = sessionCoins
+        gameOverDoubleCoinsUsed = false
+        gameOverDoubleAdInFlight = false
+        pendingGameOverDoubleCoins = false
+        gameOverCoinAnimStartMs = 0L
+        floatingTexts.clear()
         upgradeManager.totalCoins += sessionCoins
         if (score > upgradeManager.highScore) upgradeManager.highScore = score
 
@@ -710,7 +790,11 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 drawGameplay(canvas)
                 continueOfferScreen.draw(canvas, safeArea, adManager?.isRewardedReady() == true)
             }
-            GameState.GAME_OVER -> { drawGameplay(canvas); drawGameOverOverlay(canvas) }
+            GameState.GAME_OVER -> {
+                drawGameplay(canvas, drawFloatingTexts = false)
+                drawGameOverOverlay(canvas)
+                floatingTexts.forEach { it.draw(canvas) }
+            }
             GameState.SETTINGS -> settingsScreen.draw(canvas, safeArea, settingsManager)
             GameState.SHOP -> shopScreen.draw(canvas, safeArea, upgradeManager.totalCoins, shooterManager, playerAssets)
         }
@@ -724,7 +808,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         backgroundManager.draw(canvas, bgType)
     }
 
-    private fun drawGameplay(canvas: Canvas) {
+    private fun drawGameplay(canvas: Canvas, drawFloatingTexts: Boolean = true) {
         val shakeX = if (screenShakeFrames > 0) (Random.nextFloat() - 0.5f) * screenShakeIntensity * 2 else 0f
         val shakeY = if (screenShakeFrames > 0) (Random.nextFloat() - 0.5f) * screenShakeIntensity * 2 else 0f
 
@@ -738,7 +822,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         particles.forEach { it.draw(canvas) }
         coinParticles.forEach { it.draw(canvas) }
         player.draw(canvas)
-        floatingTexts.forEach { it.draw(canvas) }
+        if (drawFloatingTexts) floatingTexts.forEach { it.draw(canvas) }
 
         if (player.isNearDeath && state == GameState.PLAYING) {
             nearDeathOverlayPaint.alpha = (40 + (kotlin.math.sin(System.currentTimeMillis() * 0.006) * 30).toInt()).coerceIn(0, 255)
@@ -759,9 +843,20 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private fun drawGameOverOverlay(canvas: Canvas) {
         val survived = if (gameEndTimeMs > 0) gameEndTimeMs - gameStartTimeMs else 0L
         gameOverScreen.draw(
-            canvas, safeArea, score, sessionCoins, upgradeManager.totalCoins, maxCombo, enemiesKilled, survived, upgradeManager,
+            canvas,
+            safeArea,
+            score,
+            gameOverEarnedCoins,
+            gameOverDisplayedTotalCoins(),
+            maxCombo,
+            enemiesKilled,
+            survived,
+            upgradeManager,
             chestBanner = gameOverChestBanner,
-            chestBannerOk = gameOverChestBannerOk
+            chestBannerOk = gameOverChestBannerOk,
+            doubleCoinsUsed = gameOverDoubleCoinsUsed,
+            doubleAdInFlight = gameOverDoubleAdInFlight,
+            rewardedAdReady = adManager?.isRewardedReady() == true
         )
     }
 
@@ -848,6 +943,18 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun handleGameOverTouch(tx: Float, ty: Float) {
+        if (gameOverScreen.doubleRewardsBtnRect.contains(tx, ty)) {
+            if (!gameOverDoubleCoinsUsed && gameOverEarnedCoins > 0 && !gameOverDoubleAdInFlight) {
+                if (adManager?.isRewardedReady() == true) {
+                    gameOverDoubleAdInFlight = true
+                    adManager?.showRewardedAd { rewarded ->
+                        gameOverDoubleAdInFlight = false
+                        if (rewarded) pendingGameOverDoubleCoins = true
+                    }
+                }
+            }
+            return
+        }
         val types = UpgradeManager.UpgradeType.entries
         for (i in gameOverScreen.upgradeBtnRects.indices) {
             if (i < types.size && gameOverScreen.upgradeBtnRects[i].contains(tx, ty)) {

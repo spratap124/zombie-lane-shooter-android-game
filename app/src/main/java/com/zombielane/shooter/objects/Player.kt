@@ -99,7 +99,8 @@ class Player(
             x += dx
         }
 
-        x = x.coerceIn(safeArea.left, safeArea.right - width)
+        val maxX = (safeArea.right - width).coerceAtLeast(safeArea.left)
+        x = x.coerceIn(safeArea.left, maxX)
 
         if (invincibleFrames > 0) invincibleFrames--
     }

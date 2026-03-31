@@ -55,6 +55,34 @@ class GameOverScreen {
         style = Paint.Style.FILL
     }
 
+    private val coinSectionLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#90A4AE")
+        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
+        textAlign = Paint.Align.CENTER
+    }
+
+    private val coinBigPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FFD600")
+        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
+        textAlign = Paint.Align.CENTER
+        setShadowLayer(6f, 2f, 2f, Color.BLACK)
+    }
+
+    private val coinHintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#B0BEC5")
+        textAlign = Paint.Align.CENTER
+    }
+
+    private val coinCardBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#252538")
+        style = Paint.Style.FILL
+    }
+
+    private val coinCardStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FFD600")
+        style = Paint.Style.STROKE
+    }
+
     private val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#2A2A4A")
         style = Paint.Style.FILL
@@ -95,6 +123,16 @@ class GameOverScreen {
         style = Paint.Style.FILL
     }
 
+    private val doubleRewardsPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#7CB342")
+        style = Paint.Style.FILL
+    }
+
+    private val doubleRewardsDisabledPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#37474F")
+        style = Paint.Style.FILL
+    }
+
     private val actionTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
@@ -105,18 +143,23 @@ class GameOverScreen {
     var shopBtnRect = RectF()
     var playAgainBtnRect = RectF()
     var menuBtnRect = RectF()
+    var doubleRewardsBtnRect = RectF()
+
     fun draw(
         canvas: Canvas,
         safeArea: RectF,
         score: Int,
-        sessionCoins: Int,
-        totalCoins: Int,
+        coinsEarnedThisRun: Int,
+        totalCoinsDisplay: Int,
         maxCombo: Int,
         enemiesKilled: Int,
         timeSurvivedMs: Long,
         upgradeManager: UpgradeManager,
         chestBanner: String?,
-        chestBannerOk: Boolean
+        chestBannerOk: Boolean,
+        doubleCoinsUsed: Boolean,
+        doubleAdInFlight: Boolean,
+        rewardedAdReady: Boolean
     ) {
         val w = canvas.width.toFloat()
         val h = canvas.height.toFloat()
@@ -169,15 +212,106 @@ class GameOverScreen {
             canvas.drawText(stats[i].second, sx, statsTop + statBoxH * 0.78f, statValuePaint)
         }
 
-        yPos = statsTop + statBoxH + sp * 1.8f + 10f * s
-        coinPaint.textSize = 32f * s
-        canvas.drawText("+$sessionCoins earned", cx, yPos, coinPaint)
-        yPos += sp * 1.5f + 22f * s
-        canvas.drawCircle(cx - 60f * s, yPos - 10f * s, 13f * s, coinIconPaint)
-        coinPaint.textSize = 36f * s
-        canvas.drawText("$totalCoins", cx, yPos, coinPaint)
+        yPos = statsTop + statBoxH + sp * 1.6f + 8f * s
 
-        yPos += sp * 2f + 4f * s
+        val cardPad = 16f * s
+        val cardW = (safeArea.width() * 0.92f).coerceAtMost(w * 0.86f)
+        val cardLeft = cx - cardW / 2f
+        val cardTop = yPos
+        val doubleBtnH = if (coinsEarnedThisRun > 0) (availableH * 0.068f).coerceIn(56f * s, 76f * s) else 0f
+        val doubleBtnW = cardW - cardPad * 2f
+
+        var measureY = cardTop + cardPad + 8f * s
+        measureY += 28f * s + 44f * s + 8f * s + 22f * s
+        measureY += when {
+            coinsEarnedThisRun <= 0 -> 28f * s
+            doubleCoinsUsed -> 30f * s
+            else -> 26f * s + 34f * s
+        }
+        measureY += if (coinsEarnedThisRun > 0) doubleBtnH + cardPad else cardPad * 0.5f
+        measureY += 26f * s + 34f * s + cardPad + 16f * s
+        val cardBottom = measureY
+
+        coinCardStrokePaint.strokeWidth = (2.5f * s).coerceAtLeast(2f)
+        canvas.drawRoundRect(cardLeft, cardTop, cardLeft + cardW, cardBottom, 18f * s, 18f * s, coinCardBgPaint)
+        canvas.drawRoundRect(cardLeft, cardTop, cardLeft + cardW, cardBottom, 18f * s, 18f * s, coinCardStrokePaint)
+
+        var cardInnerY = cardTop + cardPad + 8f * s
+        coinSectionLabelPaint.textSize = 22f * s
+        canvas.drawText("COINS THIS RUN", cx, cardInnerY, coinSectionLabelPaint)
+        cardInnerY += 28f * s
+
+        coinBigPaint.textSize = 44f * s
+        val runTotalDisplay = if (doubleCoinsUsed) coinsEarnedThisRun * 2 else coinsEarnedThisRun
+        canvas.drawText("+$runTotalDisplay", cx, cardInnerY, coinBigPaint)
+        cardInnerY += 8f * s + 22f * s
+
+        coinHintPaint.textSize = 22f * s
+        when {
+            coinsEarnedThisRun <= 0 -> {
+                canvas.drawText("No coins this run — play again to earn some!", cx, cardInnerY, coinHintPaint)
+                cardInnerY += 28f * s
+            }
+            doubleCoinsUsed -> {
+                canvas.drawText("Includes +$coinsEarnedThisRun bonus from the ad ✓", cx, cardInnerY, coinHintPaint)
+                cardInnerY += 30f * s
+            }
+            else -> {
+                canvas.drawText("$coinsEarnedThisRun already added to your wallet below.", cx, cardInnerY, coinHintPaint)
+                cardInnerY += 26f * s
+                coinHintPaint.textSize = 20f * s
+                canvas.drawText("Watch a short ad to earn the same amount again (×2 this run).", cx, cardInnerY, coinHintPaint)
+                coinHintPaint.textSize = 22f * s
+                cardInnerY += 34f * s
+            }
+        }
+
+        if (coinsEarnedThisRun > 0) {
+            doubleRewardsBtnRect.set(cx - doubleBtnW / 2f, cardInnerY, cx + doubleBtnW / 2f, cardInnerY + doubleBtnH)
+            val canTap = !doubleCoinsUsed && !doubleAdInFlight && rewardedAdReady
+            val btnFill = if (canTap) doubleRewardsPaint else doubleRewardsDisabledPaint
+            canvas.drawRoundRect(doubleRewardsBtnRect, 14f * s, 14f * s, btnFill)
+            btnTextPaint.textSize = 26f * s
+            btnTextPaint.color = if (canTap) Color.WHITE else Color.parseColor("#90A4AE")
+            when {
+                doubleCoinsUsed -> {
+                    canvas.drawText("✓ Doubled — you claimed the bonus", doubleRewardsBtnRect.centerX(), doubleRewardsBtnRect.centerY() + 4f * s, btnTextPaint)
+                }
+                doubleAdInFlight -> {
+                    canvas.drawText("Ad playing…", doubleRewardsBtnRect.centerX(), doubleRewardsBtnRect.centerY() - 8f * s, btnTextPaint)
+                    btnTextPaint.textSize = 20f * s
+                    canvas.drawText("Stay until the end to get +$coinsEarnedThisRun", doubleRewardsBtnRect.centerX(), doubleRewardsBtnRect.centerY() + 14f * s, btnTextPaint)
+                    btnTextPaint.textSize = 26f * s
+                }
+                !rewardedAdReady -> {
+                    canvas.drawText("📺 DOUBLE COINS", doubleRewardsBtnRect.centerX(), doubleRewardsBtnRect.centerY() - 8f * s, btnTextPaint)
+                    btnTextPaint.textSize = 20f * s
+                    canvas.drawText("Ad loading — try again in a moment", doubleRewardsBtnRect.centerX(), doubleRewardsBtnRect.centerY() + 14f * s, btnTextPaint)
+                    btnTextPaint.textSize = 26f * s
+                }
+                else -> {
+                    canvas.drawText("📺 WATCH AD · DOUBLE THIS RUN", doubleRewardsBtnRect.centerX(), doubleRewardsBtnRect.centerY() - 10f * s, btnTextPaint)
+                    btnTextPaint.textSize = 22f * s
+                    canvas.drawText("+ $coinsEarnedThisRun coins (same as you just earned)", doubleRewardsBtnRect.centerX(), doubleRewardsBtnRect.centerY() + 16f * s, btnTextPaint)
+                    btnTextPaint.textSize = 26f * s
+                }
+            }
+            btnTextPaint.color = Color.WHITE
+            cardInnerY += doubleBtnH + cardPad
+        } else {
+            doubleRewardsBtnRect.setEmpty()
+            cardInnerY += cardPad * 0.5f
+        }
+
+        coinSectionLabelPaint.textSize = 20f * s
+        canvas.drawText("YOUR WALLET (TOTAL COINS)", cx, cardInnerY, coinSectionLabelPaint)
+        cardInnerY += 26f * s
+
+        canvas.drawCircle(cx - 56f * s, cardInnerY - 8f * s, 12f * s, coinIconPaint)
+        coinPaint.textSize = 34f * s
+        canvas.drawText("$totalCoinsDisplay", cx, cardInnerY, coinPaint)
+
+        yPos = cardBottom + sp * 1.4f
         if (chestBanner != null) {
             val bannerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = if (chestBannerOk) Color.parseColor("#A5D6A7") else Color.parseColor("#FFAB91")
