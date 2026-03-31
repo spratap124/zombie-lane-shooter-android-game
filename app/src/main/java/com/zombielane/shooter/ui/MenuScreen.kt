@@ -148,6 +148,11 @@ class MenuScreen {
         textAlign = Paint.Align.CENTER
     }
 
+    private val chestNamePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
+        textAlign = Paint.Align.CENTER
+    }
+
     private val dimOverlayPaint = Paint().apply {
         color = Color.parseColor("#CC000000")
         style = Paint.Style.FILL
@@ -312,6 +317,8 @@ class MenuScreen {
         // Horizontal inset so labels stay inside safe area (score was clipped when align was CENTER on left edge).
         val padH = kotlin.math.max(24f * s, safeArea.width() * 0.048f).coerceAtMost(56f * s)
 
+        val bannerReserve = (120f * s).coerceIn(100f, 168f)
+
         // Top bar: high score + coins
         highScorePaint.textSize = 34f * s
         infoPaint.textSize = 22f * s
@@ -409,25 +416,34 @@ class MenuScreen {
         canvas.drawText(equipped.name, cx, yPos, equippedNamePaint)
         equippedNamePaint.clearShadowLayer()
 
-        // Chest strip (icons)
+        // Chest strip (icons + type name + status)
         yPos += 36f * s
-        val chipW = (safeArea.width() - padH * 2f - 18f * s) / 4f
-        val chipH = (safeArea.width() * 0.22f).coerceIn(118f * s, 182f * s)
-        val gap = 8f * s
+        val chipGap = 16f * s
+        val rowInnerW = safeArea.width() - padH * 2f
+        val chipW = (rowInnerW - 3f * chipGap) / 4f
+        val chipH = (safeArea.width() * 0.245f).coerceIn(132f * s, 200f * s)
         val rowLeft = safeArea.left + padH
-        chestsNavRect = RectF(rowLeft, yPos, rowLeft + 4 * chipW + 3 * gap, yPos + chipH + 32f * s)
+        val streakBelowChip = 38f * s
         for (i in 0 until ChestManager.MAX_SLOTS) {
-            val left = rowLeft + i * (chipW + gap)
+            val left = rowLeft + i * (chipW + chipGap)
             tmpRect.set(left, yPos, left + chipW, yPos + chipH)
             val slot = chestSlots.getOrNull(i)
             drawChestChip(canvas, tmpRect, slot, nowMs, s, i, menuUi)
         }
+        val streakBaseline = yPos + chipH + streakBelowChip
         menuSubPaint.textSize = 26f * s
         menuSubPaint.setShadowLayer(5f * s, 0f, 1.5f * s, Color.BLACK)
-        canvas.drawText("Streak $streakDays  ·  tap chests", cx, yPos + chipH + 26f * s, menuSubPaint)
+        canvas.drawText("Streak $streakDays  ·  tap chests", cx, streakBaseline, menuSubPaint)
         menuSubPaint.clearShadowLayer()
 
-        yPos += chipH + 40f * s
+        chestsNavRect = RectF(
+            rowLeft,
+            yPos,
+            rowLeft + 4 * chipW + 3 * chipGap,
+            streakBaseline + 22f * s
+        )
+
+        yPos += chipH + streakBelowChip + 52f * s
         if (chestToast != null) {
             toastPaint.textSize = 20f * s
             canvas.drawText(chestToast, cx, yPos, toastPaint)
@@ -440,50 +456,31 @@ class MenuScreen {
         var playH = playW * bmpAr
         // Fill vertical space: wide art must not be squashed to a tiny strip (old cap caused micro-button).
         playH = playH.coerceIn(safeArea.height() * 0.075f, safeArea.height() * 0.26f)
-        playBtnRect = RectF(cx - playW / 2f, yPos, cx + playW / 2f, yPos + playH)
         val pulse = 1f + sin(frameCount * 0.065).toFloat() * 0.04f
         val pw = playW * pulse
         val ph = playH * pulse
         tmpRect.set(cx - pw / 2f, yPos + (playH - ph) / 2f, cx + pw / 2f, yPos + (playH + ph) / 2f)
         drawBitmapFit(canvas, menuUi.playButton, tmpRect)
+        // Hit target matches visible art only (container was huge; empty margin was starting the game).
+        playBtnRect.set(tmpRect)
 
-        yPos += playH + 36f * s
-        val subGap = 14f * s
-        val subW = (safeArea.width() - padH * 2f - subGap) / 2f
-        val subH = (safeArea.width() * 0.11f).coerceIn(96f * s, 132f * s)
-        shopBtnRect.set(safeArea.left + padH, yPos, safeArea.left + padH + subW, yPos + subH)
-        settingsBtnRect.set(shopBtnRect.right + subGap, yPos, safeArea.right - padH, yPos + subH)
+        yPos += playH + 28f * s
+        val weaponW = (safeArea.width() * 0.78f).coerceAtMost(playW * 1.08f)
+        val weaponH = menuUi.weaponsButton.height * (weaponW / menuUi.weaponsButton.width.coerceAtLeast(1))
+        shopBtnRect.set(cx - weaponW / 2f, yPos, cx + weaponW / 2f, yPos + weaponH)
+        drawBitmapFit(canvas, menuUi.weaponsButton, shopBtnRect)
 
-        val shopPulse = 1f + sin(frameCount * 0.055 + 1f).toFloat() * 0.02f
-        tmpRect2.set(shopBtnRect)
-        tmpRect2.inset(-2f * s * shopPulse, -2f * s * shopPulse)
-        shopGlowPaint.color = Color.argb(100, 255, 145, 0)
-        canvas.drawRoundRect(tmpRect2, 18f * s, 18f * s, shopGlowPaint)
-        canvas.drawRoundRect(shopBtnRect, 18f * s, 18f * s, shopBtnPaint)
-        canvas.save()
-        canvas.translate(shopBtnRect.left + 32f * s, shopBtnRect.centerY())
-        canvas.scale(1.28f, 1.28f)
-        canvas.drawPath(weaponPath, iconPaint)
-        canvas.restore()
-        btnTextPaint.textSize = 36f * s
-        canvas.drawText("WEAPONS", shopBtnRect.centerX() + 22f * s, shopBtnRect.centerY() + 13f * s, btnTextPaint)
-
-        val setPulse = 1f + sin(frameCount * 0.055 + 2f).toFloat() * 0.02f
-        tmpRect2.set(settingsBtnRect)
-        tmpRect2.inset(-2f * s * setPulse, -2f * s * setPulse)
-        settingsGlowPaint.color = Color.argb(90, 150, 180, 255)
-        canvas.drawRoundRect(tmpRect2, 18f * s, 18f * s, settingsGlowPaint)
-        canvas.drawRoundRect(settingsBtnRect, 18f * s, 18f * s, settingsBtnPaint)
-        canvas.save()
-        canvas.translate(settingsBtnRect.left + 32f * s, settingsBtnRect.centerY())
-        canvas.scale(1.28f, 1.28f)
-        canvas.drawPath(gearPath, iconPaint)
-        canvas.restore()
-        btnTextPaint.textSize = 36f * s
-        canvas.drawText("SETTINGS", settingsBtnRect.centerX() + 20f * s, settingsBtnRect.centerY() + 13f * s, btnTextPaint)
+        yPos += weaponH + 20f * s
+        val settingsSize = (96f * s).coerceIn(76f, 128f)
+        settingsBtnRect.set(cx - settingsSize / 2f, yPos, cx + settingsSize / 2f, yPos + settingsSize)
+        drawBitmapFit(canvas, menuUi.settingsIcon, settingsBtnRect)
 
         infoPaint.textSize = 24f * s
-        canvas.drawText("v1.0", cx, safeArea.bottom - 14f * s, infoPaint)
+        infoPaint.textAlign = Paint.Align.LEFT
+        infoPaint.setShadowLayer(4f * s, 0f, 1f * s, Color.BLACK)
+        canvas.drawText("v1.0", safeArea.left + padH, h - bannerReserve * 0.55f, infoPaint)
+        infoPaint.clearShadowLayer()
+        infoPaint.textAlign = Paint.Align.CENTER
 
         streakOkRect.setEmpty()
         if (streakPopupTitle != null && streakPopupMessage != null) {
@@ -578,17 +575,25 @@ class MenuScreen {
         chestStrokePaint.color = Color.parseColor("#3D3D5C")
         chestStrokePaint.strokeWidth = 2f * s
 
+        val textBand = 44f * s
+        val inner = 4f * s
+        val iconTop = r.top + inner
+        val iconBottom = r.bottom - textBand
+        val iconH = (iconBottom - iconTop).coerceAtLeast(28f)
+
         if (slot == null) {
             canvas.drawRoundRect(r, 12f * s, 12f * s, chestBodyPaint)
             canvas.drawRoundRect(r, 12f * s, 12f * s, chestStrokePaint)
-            val iconH = r.height() - 30f * s
-            tmpRect2.set(r.left + 3f * s, r.top + 3f * s, r.right - 3f * s, r.top + 3f * s + iconH)
+            tmpRect2.set(r.left + inner, iconTop, r.right - inner, iconTop + iconH)
             bitmapPaint.alpha = 85
             drawBitmapFit(canvas, menuUi.chest(ChestType.COMMON), tmpRect2)
             bitmapPaint.alpha = 255
-            chestTimerPaint.textSize = (r.height() * 0.16f).coerceIn(20f * s, 28f * s)
+            chestNamePaint.textSize = (12f * s).coerceIn(10f, 16f)
+            chestNamePaint.color = Color.parseColor("#616161")
+            canvas.drawText("EMPTY", r.centerX(), r.bottom - 28f * s, chestNamePaint)
+            chestTimerPaint.textSize = (r.height() * 0.13f).coerceIn(18f * s, 26f * s)
             chestTimerPaint.color = Color.parseColor("#616161")
-            canvas.drawText("—", r.centerX(), r.bottom - 10f * s, chestTimerPaint)
+            canvas.drawText("—", r.centerX(), r.bottom - 9f * s, chestTimerPaint)
             return
         }
 
@@ -603,14 +608,22 @@ class MenuScreen {
         canvas.drawRoundRect(r, 12f * s, 12f * s, chestBodyPaint)
         canvas.drawRoundRect(r, 12f * s, 12f * s, chestStrokePaint)
 
-        val iconH = r.height() - 30f * s
-        tmpRect2.set(r.left + 2f * s, r.top + 2f * s, r.right - 2f * s, r.top + 2f * s + iconH)
+        tmpRect2.set(r.left + inner, iconTop, r.right - inner, iconTop + iconH)
         drawBitmapFit(canvas, menuUi.chest(slot.type), tmpRect2)
 
-        chestTimerPaint.textSize = (r.height() * 0.17f).coerceIn(22f * s, 30f * s)
+        chestNamePaint.textSize = (12f * s).coerceIn(10f, 16f)
+        chestNamePaint.color = when (slot.type) {
+            ChestType.COMMON -> Color.parseColor("#90A4AE")
+            ChestType.RARE -> Color.parseColor("#64B5F6")
+            ChestType.EPIC -> Color.parseColor("#CE93D8")
+            ChestType.SUPER -> Color.parseColor("#FFD54F")
+        }
+        canvas.drawText(slot.type.displayName.uppercase(), r.centerX(), r.bottom - 28f * s, chestNamePaint)
+
+        chestTimerPaint.textSize = (r.height() * 0.13f).coerceIn(18f * s, 26f * s)
         chestTimerPaint.color = if (ready) Color.parseColor("#FFF59D") else Color.parseColor("#B0BEC5")
         val label = if (ready) "OPEN" else formatRemaining(slot.remainingMs(nowMs))
-        canvas.drawText(label, r.centerX(), r.bottom - 10f * s, chestTimerPaint)
+        canvas.drawText(label, r.centerX(), r.bottom - 9f * s, chestTimerPaint)
     }
 
     private fun drawBitmapFit(canvas: Canvas, bmp: Bitmap, dst: RectF) {

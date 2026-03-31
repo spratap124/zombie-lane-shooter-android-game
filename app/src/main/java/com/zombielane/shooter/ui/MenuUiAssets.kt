@@ -16,6 +16,8 @@ class MenuUiAssets(resources: Resources) {
     val menuBackground: Bitmap
     val playButton: Bitmap
     val coin: Bitmap
+    val weaponsButton: Bitmap
+    val settingsIcon: Bitmap
     private val chestBitmaps: Map<ChestType, Bitmap>
 
     init {
@@ -30,6 +32,12 @@ class MenuUiAssets(resources: Resources) {
         // Decode near final display width so on-screen bitmap stays sharp when scaled up.
         val playW = (wPx * 0.90f).toInt().coerceIn(320, 1080)
         playButton = decodeFitWidth(resources, R.drawable.play_button, playW)
+
+        val weaponsW = (wPx * 0.76f).toInt().coerceIn(280, 960)
+        weaponsButton = decodeFitWidth(resources, R.drawable.ui_weapons, weaponsW)
+
+        val settingsPx = (92f * density).toInt().coerceIn(72, 168)
+        settingsIcon = decodeSquare(resources, R.drawable.ui_settings, settingsPx)
 
         val coinPx = (64f * density).toInt().coerceIn(56, 132)
         coin = decodeSquare(resources, R.drawable.ui_coin, coinPx)
