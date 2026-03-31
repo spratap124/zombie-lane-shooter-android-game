@@ -14,7 +14,16 @@ abstract class GameObject(
     val bounds: RectF
         get() = RectF(x, y, x + width, y + height)
 
-    abstract fun update(screenWidth: Int, screenHeight: Int)
+    /**
+     * @param playfieldLeft min x for entities that should stay in the firing lane (e.g. [Enemy]).
+     * @param playfieldRight right edge of that lane (same convention as [android.graphics.RectF.right]); when null, use full [screenWidth].
+     */
+    abstract fun update(
+        screenWidth: Int,
+        screenHeight: Int,
+        playfieldLeft: Float = 0f,
+        playfieldRight: Float? = null
+    )
     abstract fun draw(canvas: Canvas)
 
     fun collidesWith(other: GameObject): Boolean {

@@ -4,6 +4,7 @@ enum class GameState {
     MENU,
     PLAYING,
     PAUSED,
+    CONTINUE_OFFER,
     GAME_OVER,
     SETTINGS,
     SHOP,

@@ -32,7 +32,7 @@ class EnemyBullet(
         style = Paint.Style.FILL
     }
 
-    override fun update(screenWidth: Int, screenHeight: Int) {
+    override fun update(screenWidth: Int, screenHeight: Int, playfieldLeft: Float, playfieldRight: Float?) {
         x += vx
         y += vy
         if (y > screenHeight || y + height < 0 || x + width < 0 || x > screenWidth) active = false

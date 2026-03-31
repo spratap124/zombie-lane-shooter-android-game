@@ -174,6 +174,42 @@ class AdManager(private val activity: Activity) {
         }
     }
 
+    /**
+     * Shows rewarded ad; [onComplete] is invoked on the UI thread with `true` if the user earned the reward.
+     * If the ad is not loaded or fails to show, [onComplete](false) is called once.
+     */
+    fun showRewardedAd(onComplete: (Boolean) -> Unit) {
+        val ad = rewardedAd ?: run {
+            activity.runOnUiThread { onComplete(false) }
+            return
+        }
+        var finished = false
+        var earnedReward = false
+        fun finish(rewarded: Boolean) {
+            if (finished) return
+            finished = true
+            activity.runOnUiThread { onComplete(rewarded) }
+        }
+
+        ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+            override fun onAdDismissedFullScreenContent() {
+                rewardedAd = null
+                loadRewarded()
+                finish(earnedReward)
+            }
+
+            override fun onAdFailedToShowFullScreenContent(error: AdError) {
+                rewardedAd = null
+                loadRewarded()
+                finish(false)
+            }
+        }
+
+        ad.show(activity) {
+            earnedReward = true
+        }
+    }
+
     // ── Lifecycle ───────────────────────────────────────────
 
     fun onPause() { bannerAdView?.pause() }

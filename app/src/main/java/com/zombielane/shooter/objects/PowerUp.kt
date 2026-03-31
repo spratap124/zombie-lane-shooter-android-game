@@ -45,7 +45,7 @@ class PowerUp(
         style = Paint.Style.FILL
     }
 
-    override fun update(screenWidth: Int, screenHeight: Int) {
+    override fun update(screenWidth: Int, screenHeight: Int, playfieldLeft: Float, playfieldRight: Float?) {
         frameAge++
         y += FALL_SPEED
         if (y > screenHeight) active = false

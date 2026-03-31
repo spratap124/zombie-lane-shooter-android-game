@@ -33,6 +33,9 @@ class Player(
     var shielded = false
     var rapidFireUntilMs = 0L
 
+    /** While [System.currentTimeMillis] < this, player takes no damage (rewarded continue shield). */
+    var continueShieldUntilMs: Long = 0L
+
     var currentBitmap: Bitmap? = null
 
     private var frameAge = 0
@@ -69,6 +72,8 @@ class Player(
     val isNearDeath: Boolean get() = health == 1 && maxHealth > 1
 
     fun takeDamage() {
+        val now = System.currentTimeMillis()
+        if (now < continueShieldUntilMs) return
         if (isInvincible) return
         if (shielded) {
             shielded = false
@@ -81,6 +86,10 @@ class Player(
 
     fun update(screenWidth: Int, screenHeight: Int, safeArea: RectF) {
         frameAge++
+        val nowMs = System.currentTimeMillis()
+        if (continueShieldUntilMs > 0L && nowMs >= continueShieldUntilMs) {
+            continueShieldUntilMs = 0L
+        }
         val centerX = x + width / 2f
         val dx = targetX - centerX
 
@@ -95,8 +104,9 @@ class Player(
         if (invincibleFrames > 0) invincibleFrames--
     }
 
-    override fun update(screenWidth: Int, screenHeight: Int) {
-        update(screenWidth, screenHeight, RectF(0f, 0f, screenWidth.toFloat(), screenHeight.toFloat()))
+    override fun update(screenWidth: Int, screenHeight: Int, playfieldLeft: Float, playfieldRight: Float?) {
+        val right = playfieldRight ?: screenWidth.toFloat()
+        update(screenWidth, screenHeight, RectF(playfieldLeft, 0f, right, screenHeight.toFloat()))
     }
 
     override fun draw(canvas: Canvas) {
@@ -149,7 +159,8 @@ class Player(
     }
 
     private fun drawShield(canvas: Canvas, cx: Float) {
-        if (!shielded) return
+        val now = System.currentTimeMillis()
+        if (!shielded && now >= continueShieldUntilMs) return
         val pulse = 1f + sin(frameAge * 0.12).toFloat() * 0.05f
         val shieldR = width * 0.7f * pulse
         canvas.drawCircle(cx, y + height * 0.4f, shieldR, shieldPaint)

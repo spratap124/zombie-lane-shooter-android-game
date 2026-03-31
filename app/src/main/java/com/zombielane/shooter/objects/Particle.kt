@@ -17,7 +17,7 @@ class Particle(
         style = Paint.Style.FILL
     }
 
-    override fun update(screenWidth: Int, screenHeight: Int) {
+    override fun update(screenWidth: Int, screenHeight: Int, playfieldLeft: Float, playfieldRight: Float?) {
         x += vx
         y += vy
         life--

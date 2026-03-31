@@ -37,7 +37,7 @@ class Bullet(
         style = Paint.Style.FILL
     }
 
-    override fun update(screenWidth: Int, screenHeight: Int) {
+    override fun update(screenWidth: Int, screenHeight: Int, playfieldLeft: Float, playfieldRight: Float?) {
         x += vx
         y += vy
         if (y + height < 0 || y > screenHeight || x + width < 0 || x > screenWidth) active = false

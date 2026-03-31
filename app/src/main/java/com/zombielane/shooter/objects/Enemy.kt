@@ -81,14 +81,16 @@ class Enemy(
 
     val isDead: Boolean get() = health <= 0
 
-    override fun update(screenWidth: Int, screenHeight: Int) {
+    override fun update(screenWidth: Int, screenHeight: Int, playfieldLeft: Float, playfieldRight: Float?) {
         frameAge++
+        val laneRight = playfieldRight ?: screenWidth.toFloat()
+        val maxX = (laneRight - width).coerceAtLeast(playfieldLeft)
 
         when (type) {
             EnemyType.ZIGZAG -> {
                 y += speed
                 x = spawnX + sin(frameAge * 0.08).toFloat() * 80f
-                x = x.coerceIn(0f, screenWidth - width)
+                x = x.coerceIn(playfieldLeft, maxX)
             }
             EnemyType.FAST -> {
                 y += speed
@@ -96,7 +98,7 @@ class Enemy(
             EnemyType.BOSS -> {
                 y += speed
                 x = spawnX + sin(frameAge * 0.03).toFloat() * 100f
-                x = x.coerceIn(0f, screenWidth - width)
+                x = x.coerceIn(playfieldLeft, maxX)
             }
             else -> {
                 y += speed

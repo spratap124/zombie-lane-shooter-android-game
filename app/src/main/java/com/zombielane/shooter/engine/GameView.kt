@@ -26,6 +26,7 @@ import com.zombielane.shooter.data.ShooterType
 import com.zombielane.shooter.data.UpgradeManager
 import com.zombielane.shooter.objects.*
 import com.zombielane.shooter.ui.*
+import kotlin.jvm.Volatile
 import kotlin.random.Random
 
 class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
@@ -57,6 +58,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private val pauseScreen = PauseScreen()
     private val settingsScreen = SettingsScreen()
     private val gameOverScreen = GameOverScreen()
+    private val continueOfferScreen = ContinueOfferScreen()
     private val shopScreen = ShopScreen()
     val upgradeManager = UpgradeManager(context)
     val settingsManager = SettingsManager(context)
@@ -81,6 +83,15 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private var chestRevealPhase: ChestRevealPhase = ChestRevealPhase.HIDDEN
     private var chestRevealPhaseStartMs: Long = 0L
     private var chestRevealResult: ChestOpenResult? = null
+
+    /** Rewarded continue; reset in [resetGame]. */
+    private var hasUsedContinue = false
+    private var continueSavedPlayerX = 0f
+    private var continueSavedPlayerY = 0f
+    private var continueSavedTargetX = 0f
+
+    @Volatile
+    private var pendingReviveAfterReward = false
 
     var state = GameState.MENU
         private set
@@ -201,6 +212,10 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 state = GameState.MENU
                 true
             }
+            GameState.CONTINUE_OFFER -> {
+                finalizeGameOver()
+                true
+            }
             GameState.GAME_OVER -> {
                 state = GameState.MENU
                 onEnteredMainMenu()
@@ -235,6 +250,8 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         screenShakeFrames = 0
         state = GameState.PLAYING
         gameOverChestBanner = null
+        hasUsedContinue = false
+        pendingReviveAfterReward = false
         post { adManager?.hideBanner() }
     }
 
@@ -245,6 +262,12 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
         when (state) {
             GameState.PLAYING -> updateGame()
+            GameState.CONTINUE_OFFER -> {
+                if (pendingReviveAfterReward) {
+                    pendingReviveAfterReward = false
+                    applyContinueRevival()
+                }
+            }
             GameState.CHESTS -> updateChestRevealAnimation(System.currentTimeMillis())
             else -> {}
         }
@@ -292,11 +315,13 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             bullets.addAll(BulletManager.spawnPattern(shooter, player.gunTipX, player.gunTipY, upgradeManager.damage))
         }
 
-        bullets.forEach { it.update(screenW, screenH) }
-        enemies.forEach { it.update(screenW, screenH) }
-        enemyBullets.forEach { it.update(screenW, screenH) }
-        particles.forEach { it.update(screenW, screenH) }
-        powerUps.forEach { it.update(screenW, screenH) }
+        val laneL = safeArea.left
+        val laneR = safeArea.right
+        bullets.forEach { it.update(screenW, screenH, laneL, laneR) }
+        enemies.forEach { it.update(screenW, screenH, laneL, laneR) }
+        enemyBullets.forEach { it.update(screenW, screenH, laneL, laneR) }
+        particles.forEach { it.update(screenW, screenH, laneL, laneR) }
+        powerUps.forEach { it.update(screenW, screenH, laneL, laneR) }
         floatingTexts.forEach { it.update() }
         coinParticles.forEach { it.update() }
 
@@ -376,7 +401,13 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             ))
         }
 
-        if (player.isDead) onGameOver()
+        if (player.isDead) {
+            if (!hasUsedContinue) {
+                openContinueOffer()
+            } else {
+                finalizeGameOver()
+            }
+        }
     }
 
     private fun handleEvents(now: Long) {
@@ -493,7 +524,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             for (off in listOf(-30f, 30f)) {
                 enemies.add(
                     Enemy(
-                        (enemy.x + enemy.width / 2f + off).coerceIn(0f, screenW - Enemy.SIZE),
+                        (enemy.x + enemy.width / 2f + off).coerceIn(safeArea.left, safeArea.right - Enemy.SIZE),
                         enemy.y, speed = 1.5f + Random.nextFloat() * 0.8f,
                         scoreValue = 5, coinValue = 1,
                         bodyColor = Color.parseColor("#CE93D8"), health = 1, type = EnemyType.FAST
@@ -543,7 +574,68 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         floatingTexts.add(FloatingText(player.gunTipX, player.y - 30f, label, color, size = 42f, life = 55))
     }
 
-    private fun onGameOver() {
+    private fun openContinueOffer() {
+        continueSavedPlayerX = player.x
+        continueSavedPlayerY = player.y
+        continueSavedTargetX = player.targetX
+        state = GameState.CONTINUE_OFFER
+    }
+
+    private fun applyContinueRevival() {
+        if (state != GameState.CONTINUE_OFFER) return
+        hasUsedContinue = true
+        player.x = continueSavedPlayerX.coerceIn(safeArea.left, safeArea.right - player.width)
+        player.y = continueSavedPlayerY
+        player.targetX = continueSavedTargetX
+        player.health = 1
+        player.invincibleFrames = 0
+        player.continueShieldUntilMs = System.currentTimeMillis() + 2500L
+        clearNearbyEnemiesForContinue(280f)
+        clearEnemyBulletsNearPlayer(140f)
+        state = GameState.PLAYING
+        gameEndTimeMs = 0L
+        floatingTexts.add(
+            FloatingText(
+                screenW / 2f, screenH * 0.35f, "CONTINUE!",
+                Color.parseColor("#4CAF50"), size = 44f, life = 60
+            )
+        )
+        post { adManager?.hideBanner() }
+    }
+
+    private fun clearNearbyEnemiesForContinue(radius: Float) {
+        val px = player.x + player.width / 2f
+        val py = player.y + player.height / 2f
+        val r2 = radius * radius
+        for (enemy in enemies.toList()) {
+            if (!enemy.active || enemy.type == EnemyType.BOSS) continue
+            val ecx = enemy.x + enemy.width / 2f
+            val ecy = enemy.y + enemy.height / 2f
+            val dx = ecx - px
+            val dy = ecy - py
+            if (dx * dx + dy * dy <= r2) {
+                spawnDeathParticles(enemy)
+                stageManager.onEnemyKilled(false)
+                enemy.active = false
+            }
+        }
+    }
+
+    private fun clearEnemyBulletsNearPlayer(padding: Float) {
+        val zone = RectF(
+            player.x - padding,
+            player.y - padding,
+            player.x + player.width + padding,
+            player.y + player.height + padding
+        )
+        for (b in enemyBullets.toList()) {
+            if (b.active && RectF.intersects(zone, b.bounds)) {
+                b.active = false
+            }
+        }
+    }
+
+    private fun finalizeGameOver() {
         state = GameState.GAME_OVER
         gameEndTimeMs = System.currentTimeMillis()
         upgradeManager.totalCoins += sessionCoins
@@ -614,6 +706,10 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             }
             GameState.PLAYING -> drawGameplay(canvas)
             GameState.PAUSED -> { drawGameplay(canvas); pauseScreen.draw(canvas, safeArea, score, sessionCoins) }
+            GameState.CONTINUE_OFFER -> {
+                drawGameplay(canvas)
+                continueOfferScreen.draw(canvas, safeArea, adManager?.isRewardedReady() == true)
+            }
             GameState.GAME_OVER -> { drawGameplay(canvas); drawGameOverOverlay(canvas) }
             GameState.SETTINGS -> settingsScreen.draw(canvas, safeArea, settingsManager)
             GameState.SHOP -> shopScreen.draw(canvas, safeArea, upgradeManager.totalCoins, shooterManager, playerAssets)
@@ -621,7 +717,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun drawBackground(canvas: Canvas) {
-        val bgType = if (state == GameState.PLAYING || state == GameState.PAUSED || state == GameState.GAME_OVER)
+        val bgType = if (state == GameState.PLAYING || state == GameState.PAUSED || state == GameState.GAME_OVER || state == GameState.CONTINUE_OFFER)
             stageManager.currentStage.backgroundType
         else
             BackgroundType.SPACE
@@ -651,12 +747,12 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
         canvas.restore()
 
-        if (state == GameState.PLAYING) {
+        if (state == GameState.PLAYING || state == GameState.CONTINUE_OFFER) {
             val shooter = shooterManager.getEquipped()
             val tempRemaining = shooterManager.getRemainingTempMs(shooterManager.equipped)
             val isTemp = !shooterManager.isUnlocked(shooterManager.equipped) && shooterManager.isTemporaryActive(shooterManager.equipped)
             val stage = stageManager.currentStage
-            hud.drawGameHud(canvas, score, sessionCoins, player.health, player.maxHealth, safeArea, comboTracker, eventManager, settingsManager.showFps, currentFps, shooter.name, shooter.bulletColor, if (isTemp) tempRemaining else -1L, stage.stageNumber, stage.name, stageManager.stageProgress, stage.isEndlessSector)
+            hud.drawGameHud(canvas, score, sessionCoins, player.health.coerceAtLeast(0), player.maxHealth, safeArea, comboTracker, eventManager, settingsManager.showFps, currentFps, shooter.name, shooter.bulletColor, if (isTemp) tempRemaining else -1L, stage.stageNumber, stage.name, stageManager.stageProgress, stage.isEndlessSector)
         }
     }
 
@@ -681,6 +777,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             GameState.MENU -> if (event.action == MotionEvent.ACTION_DOWN) handleMenuTouch(tx, ty)
             GameState.PLAYING -> handlePlayingTouch(event.action, tx, ty)
             GameState.PAUSED -> if (event.action == MotionEvent.ACTION_DOWN) handlePauseTouch(tx, ty)
+            GameState.CONTINUE_OFFER -> if (event.action == MotionEvent.ACTION_DOWN) handleContinueOfferTouch(tx, ty)
             GameState.GAME_OVER -> if (event.action == MotionEvent.ACTION_DOWN) handleGameOverTouch(tx, ty)
             GameState.SETTINGS -> if (event.action == MotionEvent.ACTION_DOWN) handleSettingsTouch(tx, ty)
             GameState.SHOP -> if (event.action == MotionEvent.ACTION_DOWN) handleShopTouch(tx, ty)
@@ -720,6 +817,19 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             return
         }
         player.targetX = tx
+    }
+
+    private fun handleContinueOfferTouch(tx: Float, ty: Float) {
+        when {
+            continueOfferScreen.noBtnRect.contains(tx, ty) -> finalizeGameOver()
+            continueOfferScreen.watchAdBtnRect.contains(tx, ty) -> {
+                if (adManager?.isRewardedReady() == true) {
+                    adManager?.showRewardedAd { rewarded ->
+                        if (rewarded) pendingReviveAfterReward = true
+                    }
+                }
+            }
+        }
     }
 
     private fun handlePauseTouch(tx: Float, ty: Float) {
