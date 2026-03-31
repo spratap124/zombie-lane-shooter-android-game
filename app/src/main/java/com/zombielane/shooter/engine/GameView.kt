@@ -85,6 +85,8 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private var chestRevealPhase: ChestRevealPhase = ChestRevealPhase.HIDDEN
     private var chestRevealPhaseStartMs: Long = 0L
     private var chestRevealResult: ChestOpenResult? = null
+    /** Grid slot index being opened; used for card flash/pulse during [ChestRevealPhase.SPINNING]. */
+    private var chestRevealSourceSlot: Int = -1
 
     /** Rewarded continue; reset in [resetGame]. */
     private var hasUsedContinue = false
@@ -232,6 +234,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 }
                 chestMergeMode = false
                 chestMergePick = -1
+                chestRevealSourceSlot = -1
                 state = GameState.MENU
                 true
             }
@@ -776,8 +779,17 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             GameState.CHESTS -> {
                 val now = System.currentTimeMillis()
                 chestScreen.draw(
-                    canvas, safeArea, chestManager.getSlots(now), now,
-                    chestMergeMode, chestMergePick, streakManager.currentStreak()
+                    canvas,
+                    safeArea,
+                    chestManager.getSlots(now),
+                    now,
+                    chestMergeMode,
+                    chestMergePick,
+                    streakManager.currentStreak(),
+                    openingSlotIndex = chestRevealSourceSlot,
+                    openingPhase = if (chestRevealResult != null) chestRevealPhase else ChestRevealPhase.HIDDEN,
+                    openingPhaseStartMs = chestRevealPhaseStartMs,
+                    menuUi = menuUiAssets
                 )
                 val rr = chestRevealResult
                 if (rr != null && chestRevealPhase != ChestRevealPhase.HIDDEN && chestRevealPhase != ChestRevealPhase.DONE) {
@@ -1069,6 +1081,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         val now = System.currentTimeMillis()
         val res = chestManager.openReadySlot(slotIndex, now) ?: return
         chestRevealResult = res
+        chestRevealSourceSlot = slotIndex
         chestRevealPhase = ChestRevealPhase.SPINNING
         chestRevealPhaseStartMs = now
         chestVibrateOpen()
@@ -1084,6 +1097,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         chestToastUntilMs = System.currentTimeMillis() + 4500L
         chestRevealPhase = ChestRevealPhase.HIDDEN
         chestRevealResult = null
+        chestRevealSourceSlot = -1
         chestVibrateOpen()
     }
 
