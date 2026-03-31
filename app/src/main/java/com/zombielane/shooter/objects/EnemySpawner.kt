@@ -10,6 +10,10 @@ class EnemySpawner {
     companion object {
         private const val BASE_INTERVAL = 65
         private const val MIN_INTERVAL = 18
+
+        /** Stage 2 boss uses skin 0 ([enemy_boss_1]); stage 3 uses 1; wraps every [EnemyAssets.BOSS_SKIN_COUNT] stages. */
+        fun bossSkinForStage(stageNumber: Int): Int =
+            (stageNumber - 2).coerceAtLeast(0) % EnemyAssets.BOSS_SKIN_COUNT
     }
 
     private var frameCounter = 0
@@ -123,7 +127,8 @@ class EnemySpawner {
             coinValue = (15 + stage.stageNumber * 5) * coinMultiplier,
             bodyColor = Color.parseColor("#B71C1C"),
             health = bossHp, type = EnemyType.BOSS,
-            canShoot = stage.stageNumber > Stage.INTRO_STAGE_COUNT, shootInterval = 3600L
+            canShoot = stage.stageNumber > Stage.INTRO_STAGE_COUNT, shootInterval = 3600L,
+            bossSkinIndex = bossSkinForStage(stage.stageNumber)
         )
     }
 

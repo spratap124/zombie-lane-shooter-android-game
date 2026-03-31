@@ -67,6 +67,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private val chestScreen = ChestScreen()
     private val chestRevealUI = ChestRevealUI()
     private val playerAssets = PlayerAssets(resources)
+    private val enemyAssets = EnemyAssets(resources)
     var adManager: AdManager? = null
     private var pendingRewardShooterType: ShooterType? = null
     private var lastEquippedShooter: ShooterType = shooterManager.equipped
@@ -118,6 +119,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     init {
         holder.addCallback(this)
         isFocusable = true
+        Enemy.bindAssets(enemyAssets)
     }
 
     fun setSystemInsets(left: Int, top: Int, right: Int, bottom: Int) {
