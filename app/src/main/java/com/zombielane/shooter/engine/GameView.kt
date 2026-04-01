@@ -17,7 +17,9 @@ import com.zombielane.shooter.ads.AdManager
 import com.zombielane.shooter.data.ChestGrantResult
 import com.zombielane.shooter.data.ChestManager
 import com.zombielane.shooter.data.ChestOpenResult
+import com.zombielane.shooter.data.ChestAnimState
 import com.zombielane.shooter.data.ChestRevealPhase
+import com.zombielane.shooter.data.ChestVisualState
 import com.zombielane.shooter.data.RunBuffManager
 import com.zombielane.shooter.data.SettingsManager
 import com.zombielane.shooter.data.StreakManager
@@ -27,6 +29,7 @@ import com.zombielane.shooter.data.UpgradeManager
 import com.zombielane.shooter.objects.*
 import com.zombielane.shooter.ui.*
 import kotlin.jvm.Volatile
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
@@ -73,6 +76,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private val runBuffManager = RunBuffManager(context)
     private val chestScreen = ChestScreen()
     private val chestRevealUI = ChestRevealUI()
+    private val chestOpeningAnimator = ChestOpeningAnimator()
+    private val chestBurstParticles = mutableListOf<Particle>()
+    private val chestSlotVisual = Array(ChestManager.MAX_SLOTS) { ChestVisualState.CLOSED }
     private val playerAssets = PlayerAssets(resources)
     private val enemyAssets = EnemyAssets(resources)
     var adManager: AdManager? = null
@@ -241,11 +247,15 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             GameState.SHOP -> { state = previousState; true }
             GameState.CHESTS -> {
                 if (chestRevealPhase != ChestRevealPhase.HIDDEN && chestRevealPhase != ChestRevealPhase.DONE) {
-                    /* Let reveal play; back still cancels double-offer to claim base */
                     if (chestRevealPhase == ChestRevealPhase.DOUBLE_OFFER) {
+                        finishChestClaim(multiplyDouble = false)
+                    } else if (chestRevealResult != null) {
                         finishChestClaim(multiplyDouble = false)
                     }
                 }
+                chestBurstParticles.clear()
+                chestOpeningAnimator.reset()
+                for (i in chestSlotVisual.indices) chestSlotVisual[i] = ChestVisualState.CLOSED
                 chestMergeMode = false
                 chestMergePick = -1
                 chestSelectedSlot = -1
@@ -316,7 +326,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                     applyContinueRevival()
                 }
             }
-            GameState.CHESTS -> updateChestRevealAnimation(System.currentTimeMillis())
+            GameState.CHESTS -> updateChestRevealAnimation(System.currentTimeMillis(), screenW, screenH)
             GameState.GAME_OVER -> updateGameOverScreen()
             else -> {}
         }
@@ -834,6 +844,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             GameState.CHESTS -> {
                 val now = System.currentTimeMillis()
                 val rr = chestRevealResult
+                val phase = chestRevealPhase
                 synchronized(chestLayoutLock) {
                     chestScreen.draw(
                         canvas,
@@ -845,12 +856,19 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                         streakManager.currentStreak(),
                         selectedSlotIndex = chestSelectedSlot,
                         openingSlotIndex = chestRevealSourceSlot,
-                        openingPhase = if (chestRevealResult != null) chestRevealPhase else ChestRevealPhase.HIDDEN,
+                        openingPhase = if (chestRevealResult != null) phase else ChestRevealPhase.HIDDEN,
                         openingPhaseStartMs = chestRevealPhaseStartMs,
-                        menuUi = menuUiAssets
+                        menuUi = menuUiAssets,
+                        slotVisualStates = chestSlotVisual
                     )
-                    if (rr != null && chestRevealPhase != ChestRevealPhase.HIDDEN && chestRevealPhase != ChestRevealPhase.DONE) {
-                        chestRevealUI.draw(canvas, safeArea, chestRevealPhase, chestRevealPhaseStartMs, now, rr)
+                }
+                if (rr != null && phase != ChestRevealPhase.HIDDEN && phase != ChestRevealPhase.DONE) {
+                    if (phase == ChestRevealPhase.SPINNING) {
+                        chestOpeningAnimator.draw(canvas, screenW.toFloat(), screenH.toFloat(), now, menuUiAssets)
+                        chestOpeningAnimator.drawParticles(canvas, chestBurstParticles)
+                        chestOpeningAnimator.drawCoinParticles(canvas, coinParticles)
+                    } else {
+                        chestRevealUI.draw(canvas, safeArea, phase, chestRevealPhaseStartMs, now, rr, menuUiAssets)
                     }
                 }
             }
@@ -966,6 +984,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 chestMergePick = -1
                 chestSelectedSlot = -1
                 chestSkipAdInFlight = false
+                for (i in chestSlotVisual.indices) chestSlotVisual[i] = ChestVisualState.CLOSED
                 adManager?.preloadRewarded()
                 state = GameState.CHESTS
             }
@@ -1121,12 +1140,23 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         streakManager.onMenuEnter(chestManager)?.let { streakPopup = it }
     }
 
-    private fun updateChestRevealAnimation(now: Long) {
+    private fun updateChestRevealAnimation(now: Long, screenW: Int, screenH: Int) {
         val r = chestRevealResult ?: return
         val elapsed = now - chestRevealPhaseStartMs
         when (chestRevealPhase) {
-            ChestRevealPhase.SPINNING -> if (elapsed >= 2800L) goChestPhase(ChestRevealPhase.REVEAL, now)
-            ChestRevealPhase.REVEAL -> if (elapsed >= 2200L) {
+            ChestRevealPhase.SPINNING -> {
+                chestOpeningAnimator.update(now, chestBurstParticles, coinParticles, screenW, screenH)
+                val src = chestRevealSourceSlot
+                if (src in 0 until ChestManager.MAX_SLOTS) {
+                    val elapsed = now - chestRevealPhaseStartMs
+                    chestSlotVisual[src] =
+                        if (elapsed >= ChestOpeningAnimator.T_FLASH_END_MS) ChestVisualState.OPENED else ChestVisualState.OPENING
+                }
+                if (chestOpeningAnimator.animState == ChestAnimState.DONE) {
+                    goChestPhase(ChestRevealPhase.REVEAL, now)
+                }
+            }
+            ChestRevealPhase.REVEAL -> if (elapsed >= 1400L) {
                 if (r.luckyBonus) goChestPhase(ChestRevealPhase.LUCKY, now)
                 else goChestPhase(ChestRevealPhase.DOUBLE_OFFER, now)
             }
@@ -1136,6 +1166,12 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun goChestPhase(phase: ChestRevealPhase, now: Long) {
+        if (phase == ChestRevealPhase.REVEAL && chestRevealPhase == ChestRevealPhase.SPINNING) {
+            chestOpeningAnimator.reset()
+            chestBurstParticles.clear()
+            coinParticles.clear()
+            for (i in chestSlotVisual.indices) chestSlotVisual[i] = ChestVisualState.CLOSED
+        }
         chestRevealPhase = phase
         chestRevealPhaseStartMs = now
         if (phase == ChestRevealPhase.REVEAL || phase == ChestRevealPhase.LUCKY) chestVibrateOpen()
@@ -1144,6 +1180,33 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private fun startChestReveal(slotIndex: Int) {
         val now = System.currentTimeMillis()
         val res = chestManager.openReadySlot(slotIndex, now) ?: return
+        val slotRect = RectF()
+        synchronized(chestLayoutLock) {
+            slotRect.set(chestScreen.slotCardRects[slotIndex])
+        }
+        val startCx = slotRect.centerX()
+        val startCy = slotRect.centerY()
+        val startHalf = min(slotRect.width(), slotRect.height()) * 0.41f
+        val s = screenW / 1080f
+        val coinTextRight = safeArea.right - 24f * s
+        val coinHudX = coinTextRight - 48f * s
+        val coinHudY = safeArea.top + 36f * s
+        chestBurstParticles.clear()
+        coinParticles.clear()
+        for (i in chestSlotVisual.indices) chestSlotVisual[i] = ChestVisualState.CLOSED
+        chestSlotVisual[slotIndex] = ChestVisualState.OPENING
+        chestOpeningAnimator.start(
+            nowMs = now,
+            startCenterX = startCx,
+            startCenterY = startCy,
+            startHalfSize = startHalf,
+            type = res.baseType,
+            rewards = res.rewards,
+            screenCenterX = screenW / 2f,
+            screenCenterY = screenH * 0.42f,
+            coinHudX = coinHudX,
+            coinHudY = coinHudY
+        )
         chestSelectedSlot = -1
         chestRevealResult = res
         chestRevealSourceSlot = slotIndex
@@ -1163,6 +1226,10 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         chestRevealPhase = ChestRevealPhase.HIDDEN
         chestRevealResult = null
         chestRevealSourceSlot = -1
+        chestBurstParticles.clear()
+        coinParticles.clear()
+        chestOpeningAnimator.reset()
+        for (i in chestSlotVisual.indices) chestSlotVisual[i] = ChestVisualState.CLOSED
         chestVibrateOpen()
     }
 

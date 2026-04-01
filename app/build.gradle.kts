@@ -39,6 +39,8 @@ android {
         buildConfig = true
     }
 
+    sourceSets.getByName("main").assets.srcDir(rootProject.layout.projectDirectory.dir("assets"))
+
     defaultConfig {
         applicationId = "com.zombielane.shooter"
         minSdk = 24

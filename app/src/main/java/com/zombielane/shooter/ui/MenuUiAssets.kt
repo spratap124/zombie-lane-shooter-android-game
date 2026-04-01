@@ -1,15 +1,17 @@
 package com.zombielane.shooter.ui
 
+import android.content.res.AssetManager
 import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import com.zombielane.shooter.R
 import com.zombielane.shooter.data.ChestType
 import kotlin.math.max
 
 /**
- * Loads and scales main-menu art once. Menu background is downscaled and scaled back up once to
- * soften detail (readable UI over busy art) without per-frame blur.
+ * Loads and scales main-menu art once. Chest closed/open pairs load from `assets/images/`:
+ * `common_chest.png`, `common_chest_open.png`, etc. Missing files use a one-time colored placeholder bitmap.
  */
 class MenuUiAssets(resources: Resources) {
 
@@ -19,6 +21,9 @@ class MenuUiAssets(resources: Resources) {
     val weaponsButton: Bitmap
     val settingsIcon: Bitmap
     private val chestBitmaps: Map<ChestType, Bitmap>
+    private val chestOpenBitmaps: Map<ChestType, Bitmap>
+
+    private val assets: AssetManager = resources.assets
 
     init {
         val dm = resources.displayMetrics
@@ -29,7 +34,6 @@ class MenuUiAssets(resources: Resources) {
         val rawMenuBg = decodeMaxSide(resources, R.drawable.menu_background, menuBgMaxSide)
         menuBackground = softenMenuBackground(rawMenuBg)
 
-        // Decode near final display width so on-screen bitmap stays sharp when scaled up.
         val playW = (wPx * 0.90f).toInt().coerceIn(320, 1080)
         playButton = decodeFitWidth(resources, R.drawable.play_button, playW)
 
@@ -43,20 +47,71 @@ class MenuUiAssets(resources: Resources) {
         coin = decodeSquare(resources, R.drawable.ui_coin, coinPx)
 
         val chestPx = (wPx / 3.15f).toInt().coerceIn(120, 300)
-        chestBitmaps = mapOf(
-            ChestType.COMMON to decodeSquare(resources, R.drawable.chest_common, chestPx),
-            ChestType.RARE to decodeSquare(resources, R.drawable.chest_rare, chestPx),
-            ChestType.EPIC to decodeSquare(resources, R.drawable.chest_epic, chestPx),
-            ChestType.SUPER to decodeSquare(resources, R.drawable.chest_super, chestPx)
-        )
+        chestBitmaps = ChestType.entries.associateWith { type ->
+            loadChestBitmap(closedAssetPath(type), chestPx, type, opened = false)
+        }
+        chestOpenBitmaps = ChestType.entries.associateWith { type ->
+            loadChestBitmap(openAssetPath(type), chestPx, type, opened = true)
+        }
     }
 
     fun chest(type: ChestType): Bitmap = chestBitmaps.getValue(type)
 
-    /**
-     * Cheap blur: shrink then expand with bilinear filtering so lasers/explosion edges smear
-     * slightly (all API levels; works with Canvas software rendering).
-     */
+    fun chestOpen(type: ChestType): Bitmap = chestOpenBitmaps.getValue(type)
+
+    private fun closedAssetPath(type: ChestType): String = when (type) {
+        ChestType.COMMON -> "images/common_chest.png"
+        ChestType.RARE -> "images/rare_chest.png"
+        ChestType.EPIC -> "images/epic_chest.png"
+        ChestType.SUPER -> "images/super_chest.png"
+    }
+
+    private fun openAssetPath(type: ChestType): String = when (type) {
+        ChestType.COMMON -> "images/common_chest_open.png"
+        ChestType.RARE -> "images/rare_chest_open.png"
+        ChestType.EPIC -> "images/epic_chest_open.png"
+        ChestType.SUPER -> "images/super_chest_open.png"
+    }
+
+    private fun loadChestBitmap(assetPath: String, size: Int, type: ChestType, opened: Boolean): Bitmap {
+        return try {
+            decodeAssetSquare(assets, assetPath, size)
+        } catch (_: Exception) {
+            placeholderChestBitmap(size, type, opened)
+        }
+    }
+
+    private fun placeholderChestBitmap(size: Int, type: ChestType, opened: Boolean): Bitmap {
+        val base = when (type) {
+            ChestType.COMMON -> Color.parseColor("#455A64")
+            ChestType.RARE -> Color.parseColor("#1565C0")
+            ChestType.EPIC -> Color.parseColor("#6A1B9A")
+            ChestType.SUPER -> Color.parseColor("#F9A825")
+        }
+        val c = if (opened) Color.argb(255, (Color.red(base) + 40).coerceAtMost(255), (Color.green(base) + 35).coerceAtMost(255), (Color.blue(base) + 25).coerceAtMost(255)) else base
+        return Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).apply { eraseColor(c) }
+    }
+
+    private fun decodeAssetSquare(assetManager: AssetManager, path: String, targetSize: Int): Bitmap {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        assetManager.open(path).use { BitmapFactory.decodeStream(it, null, bounds) }
+        var sample = 1
+        while (max(bounds.outWidth, bounds.outHeight) / sample > targetSize * 1.25f) sample *= 2
+        val opts = BitmapFactory.Options().apply {
+            inJustDecodeBounds = false
+            inSampleSize = sample
+        }
+        val bmp = assetManager.open(path).use { stream ->
+            BitmapFactory.decodeStream(stream, null, opts)
+        } ?: Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        if (bmp.width != targetSize || bmp.height != targetSize) {
+            val scaled = Bitmap.createScaledBitmap(bmp, targetSize, targetSize, true)
+            if (scaled != bmp) bmp.recycle()
+            return scaled
+        }
+        return bmp
+    }
+
     private fun softenMenuBackground(src: Bitmap): Bitmap {
         val w = src.width
         val h = src.height
@@ -70,7 +125,6 @@ class MenuUiAssets(resources: Resources) {
         return out
     }
 
-    /** Subsample so the longer side is near [maxSide]; keeps full-screen menu art memory reasonable. */
     private fun decodeMaxSide(res: Resources, id: Int, maxSide: Int): Bitmap {
         val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeResource(res, id, opts)

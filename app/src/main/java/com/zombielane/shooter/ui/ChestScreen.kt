@@ -13,6 +13,7 @@ import com.zombielane.shooter.data.ChestManager
 import com.zombielane.shooter.data.ChestRevealPhase
 import com.zombielane.shooter.data.ChestSlot
 import com.zombielane.shooter.data.ChestType
+import com.zombielane.shooter.data.ChestVisualState
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
@@ -107,7 +108,8 @@ class ChestScreen {
         openingSlotIndex: Int,
         openingPhase: ChestRevealPhase,
         openingPhaseStartMs: Long,
-        menuUi: MenuUiAssets
+        menuUi: MenuUiAssets,
+        slotVisualStates: Array<ChestVisualState>
     ) {
         val w = canvas.width.toFloat()
         val h = canvas.height.toFloat()
@@ -210,14 +212,16 @@ class ChestScreen {
             drawCompactSlot(
                 canvas, menuUi, s, i, tmpCard, slots[i], now,
                 mergeMode, mergeSelectedIndex, selectedSlotIndex,
-                openingSlotIndex, openingPhase, openingPhaseStartMs
+                openingSlotIndex, openingPhase, openingPhaseStartMs,
+                slotVisualStates[i]
             )
         }
 
         if (hasSelection) {
             drawDetailPanel(
                 canvas, menuUi, s, safeArea, cx, detailPanelTop, detailPanelBottom,
-                slots[selectedSlotIndex], now, selectedSlotIndex
+                slots[selectedSlotIndex], now, selectedSlotIndex,
+                slotVisualStates[selectedSlotIndex]
             )
         }
 
@@ -265,7 +269,8 @@ class ChestScreen {
         selectedSlotIndex: Int,
         openingSlotIndex: Int,
         openingPhase: ChestRevealPhase,
-        openingPhaseStartMs: Long
+        openingPhaseStartMs: Long,
+        visualState: ChestVisualState
     ) {
         val openingElapsed = if (openingSlotIndex == index && openingPhase == ChestRevealPhase.SPINNING) {
             (now - openingPhaseStartMs).coerceAtLeast(0L)
@@ -342,7 +347,8 @@ class ChestScreen {
             drawChestBitmap(
                 canvas, menuUi, tier, card.centerX(), iconCy, side,
                 emptySlot = false,
-                unlocking = unlocking
+                unlocking = unlocking,
+                visualState = visualState
             )
         }
 
@@ -379,7 +385,8 @@ class ChestScreen {
         panelBottom: Float,
         slot: ChestSlot?,
         now: Long,
-        slotIndex: Int
+        slotIndex: Int,
+        visualState: ChestVisualState
     ) {
         val panelH = panelBottom - panelTop
         val swPanel = safeArea.width()
@@ -445,7 +452,10 @@ class ChestScreen {
             }
         }
 
-        drawChestBitmap(canvas, menuUi, tier, cx, heroCyDraw, heroSideDraw, emptySlot = false, unlocking = unlocking)
+        drawChestBitmap(
+            canvas, menuUi, tier, cx, heroCyDraw, heroSideDraw,
+            emptySlot = false, unlocking = unlocking, visualState = visualState
+        )
 
         val labelGap = max(16f * s, swPanel * 0.028f) + heroSideBase * 0.04f
         val labelY = heroCyLayout + heroSideBase / 2f + labelGap
@@ -562,7 +572,8 @@ class ChestScreen {
         cy: Float,
         side: Float,
         emptySlot: Boolean,
-        unlocking: Boolean
+        unlocking: Boolean,
+        visualState: ChestVisualState = ChestVisualState.CLOSED
     ) {
         tmpBitmapDst.set(cx - side / 2f, cy - side / 2f, cx + side / 2f, cy + side / 2f)
         when {
@@ -588,7 +599,8 @@ class ChestScreen {
                 bitmapPaint.alpha = 255
             }
         }
-        canvas.drawBitmap(menuUi.chest(type), null, tmpBitmapDst, bitmapPaint)
+        val bmp = if (visualState == ChestVisualState.OPENED) menuUi.chestOpen(type) else menuUi.chest(type)
+        canvas.drawBitmap(bmp, null, tmpBitmapDst, bitmapPaint)
         bitmapPaint.colorFilter = null
         bitmapPaint.alpha = 255
     }
