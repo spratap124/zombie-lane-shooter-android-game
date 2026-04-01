@@ -9,7 +9,8 @@ class EnemySpawner {
 
     companion object {
         private const val BASE_INTERVAL = 65
-        private const val MIN_INTERVAL = 18
+        /** Floor keeps late-game spawn rate from melting CPU (was 18). */
+        private const val MIN_INTERVAL = 22
 
         /** Stage 2 boss uses skin 0 ([enemy_boss_1]); stage 3 uses 1; wraps every [EnemyAssets.BOSS_SKIN_COUNT] stages. */
         fun bossSkinForStage(stageNumber: Int): Int =
@@ -26,7 +27,7 @@ class EnemySpawner {
         val result = mutableListOf<Enemy>()
 
         val stageAdjusted = (BASE_INTERVAL * stage.spawnRateMultiplier).toInt()
-        spawnInterval = (stageAdjusted - score / 80).coerceAtLeast(MIN_INTERVAL)
+        spawnInterval = (stageAdjusted - score / 90).coerceAtLeast(MIN_INTERVAL)
         frameCounter++
 
         if (frameCounter >= spawnInterval) {

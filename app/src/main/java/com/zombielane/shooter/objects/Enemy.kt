@@ -61,6 +61,9 @@ class Enemy(
         setShadowLayer(3f, 1f, 1f, Color.BLACK)
     }
 
+    /** Avoid [Paint.getFontMetrics] every frame per enemy. */
+    private val healthLabelBaselineShift = -healthTextPaint.fontMetrics.ascent
+
     private val healthBarBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#44FFFFFF")
         style = Paint.Style.FILL
@@ -123,11 +126,9 @@ class Enemy(
         val scale = width / SIZE
         val barHeight = if (maxHealth > 1) (if (type == EnemyType.BOSS) 10f else 6f) else 0f
         val barTop = y - 14f
-        val fm = healthTextPaint.fontMetrics
         val gap = 6f * scale
-        // Place text so its top sits above the health bar (if any) or above the enemy sprite.
         val textTopY = if (maxHealth > 1) barTop - gap else y - gap
-        val labelBaseline = textTopY - fm.ascent
+        val labelBaseline = textTopY + healthLabelBaselineShift
 
         canvas.drawText(health.toString(), cx, labelBaseline, healthTextPaint)
 

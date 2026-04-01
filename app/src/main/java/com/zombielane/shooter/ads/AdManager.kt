@@ -152,6 +152,11 @@ class AdManager(private val activity: Activity) {
 
     fun isRewardedReady(): Boolean = rewardedAd != null
 
+    /** Loads a rewarded ad if the SDK is up and the cache is empty (menu, chests, after a failed show). */
+    fun preloadRewarded() {
+        if (isInitialized && rewardedAd == null) loadRewarded()
+    }
+
     fun showRewarded(listener: RewardListener) {
         val ad = rewardedAd ?: return
         rewardListener = listener
@@ -175,44 +180,59 @@ class AdManager(private val activity: Activity) {
     }
 
     /**
-     * Shows rewarded ad; [onComplete] is invoked on the UI thread with `true` if the user earned the reward.
-     * If the ad is not loaded or fails to show, [onComplete](false) is called once.
+     * Shows rewarded ad on the UI thread.
+     *
+     * [onComplete] runs on the main thread: [earned] is true if the user received the reward;
+     * [failedToShow] is true if the loaded ad failed to present (distinct from closing without earning).
+     * If no ad was loaded, both are false.
      */
-    fun showRewardedAd(onComplete: (Boolean) -> Unit) {
+    fun showRewardedAd(onComplete: (earned: Boolean, failedToShow: Boolean) -> Unit) {
         val ad = rewardedAd ?: run {
-            activity.runOnUiThread { onComplete(false) }
+            activity.runOnUiThread { onComplete(false, false) }
             return
         }
         var finished = false
         var earnedReward = false
-        fun finish(rewarded: Boolean) {
+        fun finish(earned: Boolean, failedToShow: Boolean) {
             if (finished) return
             finished = true
-            activity.runOnUiThread { onComplete(rewarded) }
+            activity.runOnUiThread { onComplete(earned, failedToShow) }
         }
 
         ad.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdDismissedFullScreenContent() {
                 rewardedAd = null
                 loadRewarded()
-                finish(earnedReward)
+                finish(earnedReward, false)
             }
 
             override fun onAdFailedToShowFullScreenContent(error: AdError) {
+                Log.w(TAG, "Rewarded failed to show: ${error.message}")
                 rewardedAd = null
                 loadRewarded()
-                finish(false)
+                finish(false, true)
             }
         }
 
-        ad.show(activity) {
-            earnedReward = true
+        try {
+            ad.show(activity) {
+                earnedReward = true
+            }
+        } catch (t: Throwable) {
+            Log.e(TAG, "Rewarded show threw", t)
+            rewardedAd = null
+            loadRewarded()
+            finish(false, true)
         }
     }
 
     // ── Lifecycle ───────────────────────────────────────────
 
     fun onPause() { bannerAdView?.pause() }
-    fun onResume() { bannerAdView?.resume() }
+
+    fun onResume() {
+        bannerAdView?.resume()
+        if (isInitialized && rewardedAd == null) loadRewarded()
+    }
     fun onDestroy() { bannerAdView?.destroy() }
 }

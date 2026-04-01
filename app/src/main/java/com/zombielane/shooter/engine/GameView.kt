@@ -38,6 +38,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         private const val POWER_UP_DROP_CHANCE = 0.12f
         private const val RAPID_FIRE_DURATION_MS = 5000L
         private const val GAME_OVER_COIN_ANIM_MS = 750L
+        /** Caps simultaneous grunts so collision + draw stay cheap at high stage / swarm. */
+        private const val MAX_ACTIVE_NON_BOSS_ENEMIES = 46
+        private const val MAX_PARTICLES = 220
     }
 
     private var gameThread: GameThread? = null
@@ -82,11 +85,16 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private var streakPopup: StreakManager.StreakPopup? = null
     private var chestMergeMode: Boolean = false
     private var chestMergePick: Int = -1
+    /** Focused slot for hero panel; -1 = none. */
+    private var chestSelectedSlot: Int = -1
     private var chestRevealPhase: ChestRevealPhase = ChestRevealPhase.HIDDEN
     private var chestRevealPhaseStartMs: Long = 0L
     private var chestRevealResult: ChestOpenResult? = null
     /** Grid slot index being opened; used for card flash/pulse during [ChestRevealPhase.SPINNING]. */
     private var chestRevealSourceSlot: Int = -1
+
+    /** Ignores duplicate Skip taps while a rewarded ad is presenting or finishing. */
+    private var chestSkipAdInFlight = false
 
     /** Rewarded continue; reset in [resetGame]. */
     private var hasUsedContinue = false
@@ -110,6 +118,8 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private var gameOverCoinAnimStartMs = 0L
     private var gameOverCoinAnimFrom = 0
     private var gameOverCoinAnimTo = 0
+    private var gameOverOverlayEnterMs = 0L
+    private var gameOverWasNewHighScore = false
 
     var state = GameState.MENU
         private set
@@ -148,8 +158,12 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     init {
         holder.addCallback(this)
         isFocusable = true
+        isClickable = true
         Enemy.bindAssets(enemyAssets)
     }
+
+    /** Game thread writes chest/reveal hit [RectF]s while the UI thread reads them in [handleChestScreenTouch]. */
+    private val chestLayoutLock = Any()
 
     fun setSystemInsets(left: Int, top: Int, right: Int, bottom: Int) {
         insetLeft = left
@@ -234,6 +248,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 }
                 chestMergeMode = false
                 chestMergePick = -1
+                chestSelectedSlot = -1
                 chestRevealSourceSlot = -1
                 state = GameState.MENU
                 true
@@ -283,6 +298,8 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         gameOverDoubleAdInFlight = false
         pendingGameOverDoubleCoins = false
         gameOverCoinAnimStartMs = 0L
+        gameOverOverlayEnterMs = 0L
+        gameOverWasNewHighScore = false
         post { adManager?.hideBanner() }
     }
 
@@ -412,7 +429,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         if (!stageManager.isTransitioning) {
             if (!bossActive) {
                 val spawned = enemySpawner.update(screenW, score, safeArea, stage)
-                enemies.addAll(spawned)
+                addSpawnedRespectingCap(spawned)
             }
 
             if (stageManager.shouldSpawnBoss()) {
@@ -442,8 +459,11 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         floatingTexts.removeAll { !it.active }
         coinParticles.removeAll { !it.active }
 
-        val reached = enemies.filter { it.y + it.height > player.y }
-        for (enemy in reached) {
+        val playerTop = player.y
+        for (i in enemies.indices) {
+            val enemy = enemies[i]
+            if (!enemy.active) continue
+            if (enemy.y + enemy.height <= playerTop) continue
             if (enemy.type == EnemyType.BOSS) {
                 player.takeDamage()
                 enemy.y = player.y - enemy.height - 20f
@@ -496,7 +516,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
         val bossUp = stageManager.bossSpawned && !stageManager.bossDefeated
         if (triggered == GameEvent.SWARM && !bossUp) {
-            enemies.addAll(enemySpawner.spawnBurst(8, safeArea, score, stageManager.currentStage))
+            addSpawnedRespectingCap(enemySpawner.spawnBurst(8, safeArea, score, stageManager.currentStage))
             screenShakeFrames = 20
             screenShakeIntensity = 6f
         }
@@ -518,13 +538,19 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     private fun checkBulletEnemyCollisions() {
         val bulletsToRemove = mutableSetOf<Bullet>()
-        // Snapshot: onEnemyKilled (e.g. SPLITTER) mutates [enemies]; iterating the live list causes CME.
-        val enemiesSnapshot = enemies.toList()
+        val ySlop = 8f
 
         for (bullet in bullets) {
             if (!bullet.active) continue
-            for (enemy in enemiesSnapshot) {
+            val bt = bullet.y
+            val bb = bullet.y + bullet.height
+            var ei = 0
+            while (ei < enemies.size) {
+                val enemy = enemies[ei++]
                 if (!enemy.active) continue
+                val et = enemy.y
+                val eb = enemy.y + enemy.height
+                if (et > bb + ySlop || eb < bt - ySlop) continue
                 if (bullet.collidesWith(enemy)) {
                     bulletsToRemove.add(bullet)
                     enemy.takeDamage(bullet.damage)
@@ -598,7 +624,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         }
 
         if (enemy.type == EnemyType.SPLITTER) {
+            var room = (MAX_ACTIVE_NON_BOSS_ENEMIES - nonBossEnemyCount()).coerceAtLeast(0)
             for (off in listOf(-30f, 30f)) {
+                if (room <= 0) break
                 enemies.add(
                     Enemy(
                         clampXIntoPlayfieldLane(enemy.x + enemy.width / 2f + off, Enemy.SIZE),
@@ -607,6 +635,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                         bodyColor = Color.parseColor("#CE93D8"), health = 1, type = EnemyType.FAST
                     )
                 )
+                room--
             }
         }
 
@@ -699,14 +728,13 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun clearEnemyBulletsNearPlayer(padding: Float) {
-        val zone = RectF(
-            player.x - padding,
-            player.y - padding,
-            player.x + player.width + padding,
-            player.y + player.height + padding
-        )
-        for (b in enemyBullets.toList()) {
-            if (b.active && RectF.intersects(zone, b.bounds)) {
+        val zl = player.x - padding
+        val zt = player.y - padding
+        val zr = player.x + player.width + padding
+        val zb = player.y + player.height + padding
+        for (b in enemyBullets) {
+            if (!b.active) continue
+            if (b.x + b.width > zl && b.x < zr && b.y + b.height > zt && b.y < zb) {
                 b.active = false
             }
         }
@@ -721,6 +749,8 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         pendingGameOverDoubleCoins = false
         gameOverCoinAnimStartMs = 0L
         floatingTexts.clear()
+        gameOverWasNewHighScore = score > upgradeManager.highScore
+        gameOverOverlayEnterMs = System.currentTimeMillis()
         upgradeManager.totalCoins += sessionCoins
         if (score > upgradeManager.highScore) upgradeManager.highScore = score
 
@@ -743,14 +773,39 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun spawnDeathParticles(enemy: Enemy) {
+        val room = MAX_PARTICLES - particles.size
+        if (room <= 0) return
         val cx = enemy.x + enemy.width / 2f
         val cy = enemy.y + enemy.height / 2f
         val colors = intArrayOf(Color.parseColor("#FF5722"), Color.parseColor("#FF9800"), Color.parseColor("#FFEB3B"), Color.WHITE)
-        val count = if (enemy.type == EnemyType.BOSS) 24 else 12
+        val want = if (enemy.type == EnemyType.BOSS) 18 else 10
+        val count = minOf(want, room)
         repeat(count) {
             val angle = Random.nextFloat() * Math.PI.toFloat() * 2f
             val speed = 2f + Random.nextFloat() * 5f
             particles.add(Particle(cx, cy, kotlin.math.cos(angle) * speed, kotlin.math.sin(angle) * speed, colors[Random.nextInt(colors.size)], 15 + Random.nextInt(10)))
+        }
+    }
+
+    private fun nonBossEnemyCount(): Int {
+        var n = 0
+        for (e in enemies) {
+            if (e.active && e.type != EnemyType.BOSS) n++
+        }
+        return n
+    }
+
+    /** Drops extra spawns when at cap; bosses always added by caller separately. */
+    private fun addSpawnedRespectingCap(spawned: List<Enemy>) {
+        if (spawned.isEmpty()) return
+        var room = (MAX_ACTIVE_NON_BOSS_ENEMIES - nonBossEnemyCount()).coerceAtLeast(0)
+        for (e in spawned) {
+            if (e.type == EnemyType.BOSS) {
+                enemies.add(e)
+            } else if (room > 0) {
+                enemies.add(e)
+                room--
+            }
         }
     }
 
@@ -778,22 +833,25 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             }
             GameState.CHESTS -> {
                 val now = System.currentTimeMillis()
-                chestScreen.draw(
-                    canvas,
-                    safeArea,
-                    chestManager.getSlots(now),
-                    now,
-                    chestMergeMode,
-                    chestMergePick,
-                    streakManager.currentStreak(),
-                    openingSlotIndex = chestRevealSourceSlot,
-                    openingPhase = if (chestRevealResult != null) chestRevealPhase else ChestRevealPhase.HIDDEN,
-                    openingPhaseStartMs = chestRevealPhaseStartMs,
-                    menuUi = menuUiAssets
-                )
                 val rr = chestRevealResult
-                if (rr != null && chestRevealPhase != ChestRevealPhase.HIDDEN && chestRevealPhase != ChestRevealPhase.DONE) {
-                    chestRevealUI.draw(canvas, safeArea, chestRevealPhase, chestRevealPhaseStartMs, now, rr)
+                synchronized(chestLayoutLock) {
+                    chestScreen.draw(
+                        canvas,
+                        safeArea,
+                        chestManager.getSlots(now),
+                        now,
+                        chestMergeMode,
+                        chestMergePick,
+                        streakManager.currentStreak(),
+                        selectedSlotIndex = chestSelectedSlot,
+                        openingSlotIndex = chestRevealSourceSlot,
+                        openingPhase = if (chestRevealResult != null) chestRevealPhase else ChestRevealPhase.HIDDEN,
+                        openingPhaseStartMs = chestRevealPhaseStartMs,
+                        menuUi = menuUiAssets
+                    )
+                    if (rr != null && chestRevealPhase != ChestRevealPhase.HIDDEN && chestRevealPhase != ChestRevealPhase.DONE) {
+                        chestRevealUI.draw(canvas, safeArea, chestRevealPhase, chestRevealPhaseStartMs, now, rr)
+                    }
                 }
             }
             GameState.PLAYING -> drawGameplay(canvas)
@@ -868,7 +926,10 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             chestBannerOk = gameOverChestBannerOk,
             doubleCoinsUsed = gameOverDoubleCoinsUsed,
             doubleAdInFlight = gameOverDoubleAdInFlight,
-            rewardedAdReady = adManager?.isRewardedReady() == true
+            rewardedAdReady = adManager?.isRewardedReady() == true,
+            nowMs = System.currentTimeMillis(),
+            overlayEnterMs = gameOverOverlayEnterMs,
+            wasNewHighScore = gameOverWasNewHighScore
         )
     }
 
@@ -903,6 +964,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 previousState = GameState.MENU
                 chestMergeMode = false
                 chestMergePick = -1
+                chestSelectedSlot = -1
+                chestSkipAdInFlight = false
+                adManager?.preloadRewarded()
                 state = GameState.CHESTS
             }
             menuScreen.playBtnRect.contains(tx, ty) -> resetGame()
@@ -931,7 +995,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             continueOfferScreen.noBtnRect.contains(tx, ty) -> finalizeGameOver()
             continueOfferScreen.watchAdBtnRect.contains(tx, ty) -> {
                 if (adManager?.isRewardedReady() == true) {
-                    adManager?.showRewardedAd { rewarded ->
+                    adManager?.showRewardedAd { rewarded, _ ->
                         if (rewarded) pendingReviveAfterReward = true
                     }
                 }
@@ -959,7 +1023,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             if (!gameOverDoubleCoinsUsed && gameOverEarnedCoins > 0 && !gameOverDoubleAdInFlight) {
                 if (adManager?.isRewardedReady() == true) {
                     gameOverDoubleAdInFlight = true
-                    adManager?.showRewardedAd { rewarded ->
+                    adManager?.showRewardedAd { rewarded, _ ->
                         gameOverDoubleAdInFlight = false
                         if (rewarded) pendingGameOverDoubleCoins = true
                     }
@@ -1080,6 +1144,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private fun startChestReveal(slotIndex: Int) {
         val now = System.currentTimeMillis()
         val res = chestManager.openReadySlot(slotIndex, now) ?: return
+        chestSelectedSlot = -1
         chestRevealResult = res
         chestRevealSourceSlot = slotIndex
         chestRevealPhase = ChestRevealPhase.SPINNING
@@ -1118,60 +1183,97 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     private fun showRewardedSkipTimer(slotIndex: Int) {
         val am = adManager
-        if (am == null || !am.isRewardedReady()) {
+        if (am == null) {
             chestManager.skipTimerForSlot(slotIndex)
             return
         }
-        post {
-            am.showRewarded(object : AdManager.RewardListener {
-                override fun onRewardEarned() {
-                    chestManager.skipTimerForSlot(slotIndex)
-                }
-            })
+        if (chestSkipAdInFlight) return
+        if (!am.isRewardedReady()) {
+            chestManager.skipTimerForSlot(slotIndex)
+            am.preloadRewarded()
+            return
+        }
+        chestSkipAdInFlight = true
+        am.showRewardedAd { earned, failedToShow ->
+            chestSkipAdInFlight = false
+            if (earned || failedToShow) chestManager.skipTimerForSlot(slotIndex)
         }
     }
 
     private fun handleChestScreenTouch(tx: Float, ty: Float) {
         val rr = chestRevealResult
-        if (rr != null && chestRevealPhase == ChestRevealPhase.DOUBLE_OFFER) {
+        val phase = chestRevealPhase
+        if (rr != null && phase == ChestRevealPhase.DOUBLE_OFFER) {
+            val doubleAdR = RectF()
+            val claimR = RectF()
+            synchronized(chestLayoutLock) {
+                doubleAdR.set(chestRevealUI.doubleAdRect)
+                claimR.set(chestRevealUI.claimRect)
+            }
             when {
-                chestRevealUI.doubleAdRect.contains(tx, ty) -> showRewardedDoubleChest()
-                chestRevealUI.claimRect.contains(tx, ty) -> finishChestClaim(multiplyDouble = false)
+                chestHitContains(doubleAdR, tx, ty) -> showRewardedDoubleChest()
+                chestHitContains(claimR, tx, ty) -> finishChestClaim(multiplyDouble = false)
             }
             return
         }
-        if (rr != null && chestRevealPhase != ChestRevealPhase.HIDDEN) return
+        if (rr != null && phase != ChestRevealPhase.HIDDEN) return
 
-        if (chestScreen.backBtnRect.contains(tx, ty)) {
+        val backR = RectF()
+        val mergeR = RectF()
+        val openR = RectF()
+        val skipR = RectF()
+        val slotRects = Array(ChestManager.MAX_SLOTS) { RectF() }
+        synchronized(chestLayoutLock) {
+            backR.set(chestScreen.backBtnRect)
+            mergeR.set(chestScreen.mergeBtnRect)
+            openR.set(chestScreen.detailOpenRect)
+            skipR.set(chestScreen.detailSkipRect)
+            for (i in 0 until ChestManager.MAX_SLOTS) {
+                slotRects[i].set(chestScreen.slotCardRects[i])
+            }
+        }
+
+        if (chestHitContains(backR, tx, ty)) {
             chestMergeMode = false
             chestMergePick = -1
+            chestSelectedSlot = -1
+            chestSkipAdInFlight = false
             state = GameState.MENU
-            return
-        }
-        if (chestScreen.mergeBtnRect.contains(tx, ty)) {
-            chestMergeMode = !chestMergeMode
-            chestMergePick = -1
             return
         }
 
         val now = System.currentTimeMillis()
         val slots = chestManager.getSlots(now)
+
+        val sel = chestSelectedSlot
+        if (sel in 0 until ChestManager.MAX_SLOTS && slots[sel] != null) {
+            val slot = slots[sel]!!
+            // Before merge: detail actions sit above the merge bar; avoids accidental merge when tapping Skip/Open.
+            if (chestHitContains(openR, tx, ty) && slot.isReady(now)) {
+                startChestReveal(sel)
+                return
+            }
+            if (chestHitContains(skipR, tx, ty) && !slot.isReady(now)) {
+                showRewardedSkipTimer(sel)
+                return
+            }
+        }
+
+        if (chestHitContains(mergeR, tx, ty)) {
+            chestMergeMode = !chestMergeMode
+            chestMergePick = -1
+            chestSelectedSlot = -1
+            return
+        }
+
         for (i in 0 until ChestManager.MAX_SLOTS) {
-            if (slots[i] == null) continue
-            if (chestScreen.slotSkipRects[i].contains(tx, ty) && !slots[i]!!.isReady(now)) {
-                showRewardedSkipTimer(i)
-                return
-            }
-            if (chestScreen.slotOpenRects[i].contains(tx, ty) && slots[i]!!.isReady(now)) {
-                startChestReveal(i)
-                return
-            }
-            if (chestMergeMode && chestScreen.slotCardRects[i].contains(tx, ty)) {
+            if (chestMergeMode && chestHitContains(slotRects[i], tx, ty)) {
                 if (chestMergePick < 0) chestMergePick = i
                 else if (chestMergePick != i) {
                     if (chestManager.tryMergeSlots(chestMergePick, i)) {
                         chestMergeMode = false
                         chestMergePick = -1
+                        chestSelectedSlot = -1
                         chestVibrateOpen()
                     } else {
                         chestMergePick = i
@@ -1180,6 +1282,20 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 return
             }
         }
+
+        for (i in 0 until ChestManager.MAX_SLOTS) {
+            if (chestHitContains(slotRects[i], tx, ty)) {
+                chestSelectedSlot = if (chestSelectedSlot == i) -1 else i
+                return
+            }
+        }
+    }
+
+    /** Inclusive edge slop: [RectF.contains] excludes right/bottom; game-thread/layout races are guarded by [chestLayoutLock]. */
+    private fun chestHitContains(r: RectF, x: Float, y: Float): Boolean {
+        if (r.isEmpty) return false
+        val slop = 6f
+        return x >= r.left - slop && x <= r.right + slop && y >= r.top - slop && y <= r.bottom + slop
     }
 
     private fun chestVibrateOpen() {

@@ -27,6 +27,12 @@ abstract class GameObject(
     abstract fun draw(canvas: Canvas)
 
     fun collidesWith(other: GameObject): Boolean {
-        return active && other.active && RectF.intersects(bounds, other.bounds)
+        if (!active || !other.active) return false
+        val x1 = x + width
+        val ox1 = other.x + other.width
+        if (x1 <= other.x || x >= ox1) return false
+        val y1 = y + height
+        val oy1 = other.y + other.height
+        return y1 > other.y && y < oy1
     }
 }
