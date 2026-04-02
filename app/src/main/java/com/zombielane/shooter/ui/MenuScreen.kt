@@ -354,52 +354,13 @@ class MenuScreen {
 
         val bannerReserve = (120f * s).coerceIn(100f, 168f)
 
-        // Top bar: coins top-left, settings top-right (above ad banner; avoids tiny screens).
-        val coinAnchorY = safeArea.top + 40f * s
+        // Top bar: settings only (coins + best score flank the loadout ship below).
+        val settingsAnchorY = safeArea.top + 40f * s
         val settingsSize = (88f * s).coerceIn(72f, 112f)
         val stRight = safeArea.right - padH
-        val stTop = coinAnchorY - settingsSize / 2f
+        val stTop = settingsAnchorY - settingsSize / 2f
         settingsBtnRect.set(stRight - settingsSize, stTop, stRight, stTop + settingsSize)
         drawBitmapFit(canvas, menuUi.settingsIcon, settingsBtnRect)
-
-        val coinBmp = menuUi.coin
-        val coinDraw = coinBmp.width * coinSpin
-        coinPaint.textSize = 36f * s
-        coinPaint.color = Color.parseColor("#FFE082")
-        val coinStr = totalCoins.toString()
-        val coinGap = 14f * s
-        val coinLeft = safeArea.left + padH
-        val coinCx = coinLeft + coinDraw / 2f
-        val coinCy = coinAnchorY + coinBob
-        tmpRect.set(
-            coinCx - coinDraw / 2f,
-            coinCy - coinDraw / 2f,
-            coinCx + coinDraw / 2f,
-            coinCy + coinDraw / 2f
-        )
-        drawBitmapFit(canvas, coinBmp, tmpRect)
-        coinPaint.textAlign = Paint.Align.LEFT
-        coinPaint.setShadowLayer(8f * s, 0f, 2f * s, Color.BLACK)
-        canvas.drawText(
-            coinStr,
-            coinLeft + coinDraw + coinGap,
-            coinCy + 12f * s,
-            coinPaint
-        )
-        coinPaint.clearShadowLayer()
-
-        highScorePaint.textSize = 34f * s
-        if (highScore > 0) {
-            highScorePaint.setShadowLayer(8f * s, 0f, 2f * s, Color.BLACK)
-            canvas.drawText(
-                "BEST $highScore",
-                safeArea.left + padH,
-                coinAnchorY + 48f * s,
-                highScorePaint
-            )
-            highScorePaint.clearShadowLayer()
-        }
-        infoPaint.textSize = 22f * s
 
         // Title + glow pulse + scale
         var yPos = safeArea.top + safeArea.height() * 0.055f
@@ -445,6 +406,80 @@ class MenuScreen {
         canvas.drawBitmap(bmp, -bmp.width / 2f, -bmp.height / 2f, null)
         canvas.restore()
 
+        val haloR = shipTarget * 0.55f
+        // Clear space between loadout ship glow and flank stats (scale + % of ship for large icons).
+        val flankGap = max(44f * s, 36f) + shipTarget * 0.16f
+        val edgePad = safeArea.left + padH
+        val edgeRight = safeArea.right - padH
+        // Hard stop: stats must not enter the ship disc + gap.
+        val shipInnerLeft = shipCx - haloR - flankGap
+        val shipInnerRight = shipCx + haloR + flankGap
+        // Same geometry as chest strip below — coin column starts at right edge of rightmost chest.
+        val chipGap = 16f * s
+        val rowInnerW = safeArea.width() - padH * 2f
+        val chipW = (rowInnerW - 3f * chipGap) / 4f
+        val rowLeft = safeArea.left + padH
+        val rightmostChestRight = rowLeft + 4f * chipW + 3f * chipGap
+
+        if (highScore > 0) {
+            highScorePaint.textAlign = Paint.Align.LEFT
+            val labelTs = 22f * s
+            val scoreTs = 32f * s
+            val lineGap = 8f * s
+            highScorePaint.textSize = scoreTs
+            highScorePaint.color = Color.parseColor("#FFE082")
+            val scoreStr = highScore.toString()
+            val fmScore = highScorePaint.fontMetrics
+            val wScore = highScorePaint.measureText(scoreStr)
+            highScorePaint.textSize = labelTs
+            highScorePaint.color = Color.parseColor("#B0BEC5")
+            val fmLabel = highScorePaint.fontMetrics
+            val wLabel = highScorePaint.measureText("BEST")
+            val wBestCol = max(wLabel, wScore)
+            val blockH = (fmLabel.descent - fmLabel.ascent) + lineGap + (fmScore.descent - fmScore.ascent)
+            val labelBaseline = shipCy - blockH / 2f - fmLabel.ascent
+            var bestLeftX = edgePad
+            if (bestLeftX + wBestCol > shipInnerLeft) {
+                bestLeftX = (shipInnerLeft - wBestCol).coerceAtLeast(edgePad)
+            }
+            highScorePaint.setShadowLayer(6f * s, 0f, 2f * s, Color.BLACK)
+            canvas.drawText("BEST", bestLeftX, labelBaseline, highScorePaint)
+            highScorePaint.textSize = scoreTs
+            highScorePaint.color = Color.parseColor("#FFE082")
+            val scoreBaseline = labelBaseline + fmLabel.descent + lineGap - highScorePaint.fontMetrics.ascent
+            canvas.drawText(scoreStr, bestLeftX, scoreBaseline, highScorePaint)
+            highScorePaint.clearShadowLayer()
+            highScorePaint.textSize = 34f * s
+        }
+
+        coinPaint.textSize = 36f * s
+        coinPaint.color = Color.parseColor("#FFE082")
+        val coinStr = totalCoins.toString()
+        val coinBmp = menuUi.coin
+        val coinDraw = coinBmp.width * coinSpin
+        val fmCoin = coinPaint.fontMetrics
+        val coinTextW = coinPaint.measureText(coinStr)
+        val coinColW = max(coinDraw, coinTextW)
+        val stackGap = 8f * s
+        val coinStackH = coinDraw + stackGap + (fmCoin.descent - fmCoin.ascent)
+        val coinNudgeLeft = 64f * s
+        val coinAnchorX = rightmostChestRight - coinNudgeLeft
+        var coinLeftX = coinAnchorX
+        if (coinLeftX + coinColW > edgeRight) {
+            coinLeftX = edgeRight - coinColW
+        }
+        coinLeftX = max(coinLeftX, coinAnchorX)
+        val stackTop = shipCy + coinBob - coinStackH / 2f
+        val iconLeft = coinLeftX + (coinColW - coinDraw) / 2f
+        tmpRect.set(iconLeft, stackTop, iconLeft + coinDraw, stackTop + coinDraw)
+        drawBitmapFit(canvas, coinBmp, tmpRect)
+        coinPaint.textAlign = Paint.Align.CENTER
+        coinPaint.setShadowLayer(8f * s, 0f, 2f * s, Color.BLACK)
+        val coinNumBaseline = stackTop + coinDraw + stackGap - fmCoin.ascent
+        canvas.drawText(coinStr, coinLeftX + coinColW / 2f, coinNumBaseline, coinPaint)
+        coinPaint.clearShadowLayer()
+        coinPaint.textAlign = Paint.Align.LEFT
+
         yPos += shipTarget + 30f * s
         equippedLabelPaint.textSize = 26f * s
         equippedLabelPaint.setShadowLayer(5f * s, 0f, 1.5f * s, Color.BLACK)
@@ -460,11 +495,7 @@ class MenuScreen {
 
         // Chest strip (icons + type name + status)
         yPos += 36f * s
-        val chipGap = 16f * s
-        val rowInnerW = safeArea.width() - padH * 2f
-        val chipW = (rowInnerW - 3f * chipGap) / 4f
         val chipH = (safeArea.width() * 0.245f).coerceIn(132f * s, 200f * s)
-        val rowLeft = safeArea.left + padH
         val streakBelowChip = 38f * s
         for (i in 0 until ChestManager.MAX_SLOTS) {
             val left = rowLeft + i * (chipW + chipGap)
