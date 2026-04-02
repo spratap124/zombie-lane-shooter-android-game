@@ -45,7 +45,8 @@ class MenuUiAssets(resources: Resources) {
             placeholderWideButtonBitmap(dailyW, Color.parseColor("#00838F"))
         }
 
-        val weaponsW = (wPx * 0.76f).toInt().coerceIn(280, 960)
+        // Same decode width as daily so both read crisply at equal on-screen size in the menu row.
+        val weaponsW = dailyW
         weaponsButton = try {
             decodeAssetFitWidth(assets, "images/weapons_button_2.png", weaponsW)
         } catch (_: Exception) {

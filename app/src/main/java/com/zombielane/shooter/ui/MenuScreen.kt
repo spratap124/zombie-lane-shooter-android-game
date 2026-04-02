@@ -676,9 +676,7 @@ class MenuScreen {
         tmpRect.set(dailyMissionsBtnRect)
         drawBitmapFit(canvas, dailyBmp, tmpRect)
         tmpRect.set(shopBtnRect)
-        bitmapPaint.alpha = (255 * 0.85f).toInt()
         drawBitmapFit(canvas, weaponBmp, tmpRect)
-        bitmapPaint.alpha = 255
         drawDailyMissionProgressDots(
             canvas,
             dailyMissionsBtnRect.centerX(),
