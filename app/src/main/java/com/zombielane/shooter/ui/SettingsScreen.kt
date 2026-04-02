@@ -1,5 +1,6 @@
 package com.zombielane.shooter.ui
 
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -46,11 +47,6 @@ class SettingsScreen {
         style = Paint.Style.FILL
     }
 
-    private val backBtnPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#37474F")
-        style = Paint.Style.FILL
-    }
-
     private val btnTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
@@ -67,7 +63,7 @@ class SettingsScreen {
     var backBtnRect = RectF()
     var confirmResetActive = false
 
-    fun draw(canvas: Canvas, safeArea: RectF, settings: SettingsManager) {
+    fun draw(canvas: Canvas, safeArea: RectF, settings: SettingsManager, backButton: Bitmap) {
         val w = canvas.width.toFloat()
         val h = canvas.height.toFloat()
         val cx = w / 2f
@@ -80,7 +76,16 @@ class SettingsScreen {
 
         canvas.drawRect(0f, 0f, w, h, overlayPaint)
 
-        var yPos = safeArea.top + 66f * s
+        val backSize = 68f * s
+        backBtnRect.set(
+            safeArea.left + 8f * s,
+            safeArea.top + 8f * s,
+            safeArea.left + 8f * s + backSize,
+            safeArea.top + 8f * s + backSize
+        )
+        MenuUiAssets.drawBackButton(canvas, backBtnRect, backButton)
+
+        var yPos = safeArea.top + 8f * s + backSize + 28f * s
         canvas.drawText("SETTINGS", cx, yPos, titlePaint)
 
         yPos += 90f * s
@@ -129,12 +134,5 @@ class SettingsScreen {
             yPos += resetH + 10f * s
             canvas.drawText("This will erase all coins & upgrades!", cx, yPos, warnPaint)
         }
-
-        yPos += resetH + 44f * s
-        val backW = safeArea.width() * 0.45f
-        val backH = 68f * s
-        backBtnRect = RectF(cx - backW / 2f, yPos, cx + backW / 2f, yPos + backH)
-        canvas.drawRoundRect(backBtnRect, 16f * s, 16f * s, backBtnPaint)
-        canvas.drawText("BACK", cx, yPos + backH * 0.62f, btnTextPaint)
     }
 }

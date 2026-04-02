@@ -94,16 +94,6 @@ class DailyMissionsScreen {
         textAlign = Paint.Align.CENTER
     }
 
-    private val backCirclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val backStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-    private val backArrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
-        textAlign = Paint.Align.CENTER
-    }
-    private val backBtnPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#37474F")
-        style = Paint.Style.FILL
-    }
     private val btnTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
@@ -117,9 +107,9 @@ class DailyMissionsScreen {
     private val tmpDailyBar = RectF()
     private val tmpMilestone = RectF()
 
-    /** Top-left ← (matches Chests); drawn last so it stays above cards. */
+    /** Top-left back; drawn last so it stays above cards. */
     var backBtnRect = RectF()
-    /** Wide BACK above the ad banner reserve. */
+    /** Cleared; only [backBtnRect] is used (top-left). */
     var wideBackBtnRect = RectF()
     val claimBtnRects: Array<RectF> = Array(DailyMissionManager.MISSION_COUNT) { RectF() }
 
@@ -170,8 +160,7 @@ class DailyMissionsScreen {
         val contentBottom = safeArea.bottom - bannerReserve
         val safeH = (contentBottom - safeArea.top).coerceAtLeast(120f * ts)
 
-        val backH = 54f * ts
-        val backMargin = 16f * ts
+        val bottomMargin = 12f * ts
         val cardGap = 14f * ts
         val blockGap = 14f * ts
 
@@ -191,12 +180,12 @@ class DailyMissionsScreen {
 
         val cardW = safeArea.width() * 0.92f
         val left = safeArea.left + (safeArea.width() - cardW) / 2f
-        val usableForCards = safeH - headerBlockH - progressSectionH - backH - backMargin - blockGap * 2f
+        val usableForCards = safeH - headerBlockH - progressSectionH - bottomMargin - blockGap * 2f
         val rawCardH = usableForCards / 3f - cardGap
         val cardH = rawCardH.coerceIn(132f * ts, 280f * ts)
 
         val questsStackH = headerBlockH + progressSectionH + blockGap + 3f * (cardH + cardGap)
-        val verticalPad = ((safeH - questsStackH - backH - backMargin).coerceAtLeast(12f * ts)) / 2f
+        val verticalPad = ((safeH - questsStackH - bottomMargin).coerceAtLeast(12f * ts)) / 2f
         val yTop = safeArea.top + verticalPad
 
         val titleBaseline = yTop - fmTitleHeader.ascent
@@ -224,30 +213,16 @@ class DailyMissionsScreen {
             y += cardH + cardGap
         }
 
-        val backTop = contentBottom - backH - backMargin
-        val backWideHalfW = 140f * ts
-        wideBackBtnRect.set(cx - backWideHalfW, backTop, cx + backWideHalfW, backTop + backH)
-        canvas.drawRoundRect(wideBackBtnRect, 14f * ts, 14f * ts, backBtnPaint)
-        btnTextPaint.textSize = 30f * ts
-        canvas.drawText("BACK", wideBackBtnRect.centerX(), wideBackBtnRect.centerY() + 11f * ts, btnTextPaint)
+        wideBackBtnRect.setEmpty()
 
-        val backSize = 46f * s1080
+        val backSize = 68f * s1080
         backBtnRect.set(
             safeArea.left + 8f * s1080,
             safeArea.top + 8f * s1080,
             safeArea.left + 8f * s1080 + backSize,
             safeArea.top + 8f * s1080 + backSize
         )
-        backCirclePaint.color = Color.parseColor("#1A2238")
-        canvas.drawRoundRect(backBtnRect, 12f * s1080, 12f * s1080, backCirclePaint)
-        backStrokePaint.color = Color.parseColor("#3D5270")
-        backStrokePaint.strokeWidth = 2f * s1080
-        canvas.drawRoundRect(backBtnRect, 12f * s1080, 12f * s1080, backStrokePaint)
-        backArrowPaint.textSize = 32f * s1080
-        backArrowPaint.color = Color.WHITE
-        backArrowPaint.setShadowLayer(5f * s1080, 0f, 2f * s1080, Color.BLACK)
-        canvas.drawText("←", backBtnRect.centerX(), backBtnRect.centerY() + 11f * s1080, backArrowPaint)
-        backArrowPaint.clearShadowLayer()
+        MenuUiAssets.drawBackButton(canvas, backBtnRect, menuUi.backButton)
     }
 
     private fun drawAmbientGlow(canvas: Canvas, w: Float, h: Float, cx: Float, nowMs: Long) {

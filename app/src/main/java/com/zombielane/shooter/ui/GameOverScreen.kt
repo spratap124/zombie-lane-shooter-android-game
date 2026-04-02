@@ -1,5 +1,6 @@
 package com.zombielane.shooter.ui
 
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
@@ -70,15 +71,6 @@ class GameOverScreen {
     private val playBtnGlow = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val doubleBtnFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val doubleBtnGlow = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-    private val menuBtnStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        color = Color.parseColor("#546E7A")
-    }
-    private val menuBtnFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.FILL
-        color = Color.parseColor("#1E2836")
-    }
-
     private val btnLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
@@ -102,13 +94,6 @@ class GameOverScreen {
     var doubleRewardsBtnRect = RectF()
     var backBtnRect = RectF()
 
-    private val backCirclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val backStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-    private val backArrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
-        textAlign = Paint.Align.CENTER
-    }
-
     fun draw(
         canvas: Canvas,
         safeArea: RectF,
@@ -126,7 +111,8 @@ class GameOverScreen {
         rewardedAdReady: Boolean,
         nowMs: Long,
         overlayEnterMs: Long,
-        wasNewHighScore: Boolean
+        wasNewHighScore: Boolean,
+        backButton: Bitmap
     ) {
         val w = canvas.width.toFloat()
         val h = canvas.height.toFloat()
@@ -148,7 +134,6 @@ class GameOverScreen {
         val gap = max(22f * s, sw * 0.036f).coerceAtLeast(18f)
         val playH = max(58f * s, sw * 0.128f).coerceAtMost(104f)
         val doubleH = max(54f * s, sw * 0.118f).coerceAtMost(96f)
-        val menuH = max(50f * s, sw * 0.108f).coerceAtMost(88f)
         val upgradeRowH = max(52f * s, sw * 0.12f).coerceAtMost(86f)
         val shopH = max(52f * s, sw * 0.115f).coerceAtMost(84f)
 
@@ -178,7 +163,7 @@ class GameOverScreen {
         val betweenSections = max(12f * s, sw * 0.024f)
 
         val blockH = topPad + titleBlock + scoreBlock + highExtra + betweenSections + statsBlock + coinBlock +
-            walletBlock + chestExtra + betweenSections + playH + gap + doubleExtra + menuH + gap + upgradeRowH + gap + shopH + padH
+            walletBlock + chestExtra + betweenSections + playH + gap + doubleExtra + upgradeRowH + gap + shopH + padH
 
         var y = safeArea.top + ((availH - blockH) * 0.5f).coerceAtLeast(8f * s)
 
@@ -302,16 +287,7 @@ class GameOverScreen {
             doubleRewardsBtnRect.setEmpty()
         }
 
-        menuBtnRect.set(padX, y, padX + btnW, y + menuH)
-        menuBtnStroke.strokeWidth = max(2f * s, sw * 0.004f)
-        canvas.drawRoundRect(menuBtnRect, 16f * s, 16f * s, menuBtnFill)
-        canvas.drawRoundRect(menuBtnRect, 16f * s, 16f * s, menuBtnStroke)
-        btnLabelPaint.textSize = max(24f * s, sw * 0.04f).coerceAtMost(34f)
-        btnLabelPaint.color = Color.parseColor("#CFD8DC")
-        canvas.drawText("BACK", menuBtnRect.centerX(), menuBtnRect.centerY() + max(8f * s, sw * 0.016f), btnLabelPaint)
-        btnLabelPaint.color = Color.WHITE
-
-        y += menuH + gap
+        menuBtnRect.setEmpty()
 
         drawUpgradeRow(canvas, cx, y, btnW, s, sw, upgradeRowH, upgradeManager)
         y += upgradeRowH + gap
@@ -322,6 +298,15 @@ class GameOverScreen {
         canvas.drawRoundRect(shopBtnRect, 14f * s, 14f * s, shopMiniPaint)
         btnLabelPaint.textSize = max(24f * s, sw * 0.04f).coerceAtMost(34f)
         canvas.drawText("WEAPONS", shopBtnRect.centerX(), shopBtnRect.centerY() + max(8f * s, sw * 0.016f), btnLabelPaint)
+
+        val backSz = 68f * s1080
+        backBtnRect.set(
+            safeArea.left + 8f * s1080,
+            safeArea.top + 8f * s1080,
+            safeArea.left + 8f * s1080 + backSz,
+            safeArea.top + 8f * s1080 + backSz
+        )
+        MenuUiAssets.drawBackButton(canvas, backBtnRect, backButton)
     }
 
     private fun drawAmbientParticles(canvas: Canvas, w: Float, h: Float, safeArea: RectF, nowMs: Long, s: Float) {

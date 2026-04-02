@@ -4,7 +4,10 @@ import android.content.res.AssetManager
 import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
 import com.zombielane.shooter.R
 import com.zombielane.shooter.data.ChestType
 import kotlin.math.max
@@ -19,6 +22,10 @@ class MenuUiAssets(resources: Resources) {
     val playButton: Bitmap
     val dailyMissionsButton: Bitmap
     val coin: Bitmap
+    /** High-res coin for weapon shop header and price rows; from [images/coin.png]. */
+    val weaponShopCoin: Bitmap
+    /** Sci-fi back control; from [images/back_button_2.png]. */
+    val backButton: Bitmap
     val weaponsButton: Bitmap
     val settingsIcon: Bitmap
     private val chestBitmaps: Map<ChestType, Bitmap>
@@ -59,12 +66,37 @@ class MenuUiAssets(resources: Resources) {
         val coinPx = (64f * density).toInt().coerceIn(56, 132)
         coin = decodeSquare(resources, R.drawable.ui_coin, coinPx)
 
+        val shopCoinPx = (96f * density).toInt().coerceIn(88, 220)
+        weaponShopCoin = try {
+            decodeAssetSquare(assets, "images/coin.png", shopCoinPx)
+        } catch (_: Exception) {
+            coin
+        }
+
+        val backBtnPx = (118f * density).toInt().coerceIn(108, 260)
+        backButton = try {
+            decodeAssetSquare(assets, "images/back_button_2.png", backBtnPx)
+        } catch (_: Exception) {
+            Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888).apply {
+                eraseColor(Color.parseColor("#37474F"))
+            }
+        }
+
         val chestPx = (wPx / 3.15f).toInt().coerceIn(120, 300)
         chestBitmaps = ChestType.entries.associateWith { type ->
             loadChestBitmap(closedAssetPath(type), chestPx, type, opened = false)
         }
         chestOpenBitmaps = ChestType.entries.associateWith { type ->
             loadChestBitmap(openAssetPath(type), chestPx, type, opened = true)
+        }
+    }
+
+    companion object {
+        private val backButtonDstPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
+
+        fun drawBackButton(canvas: Canvas, dst: RectF, bmp: Bitmap) {
+            if (bmp.width < 2 || dst.width() <= 0f || dst.height() <= 0f) return
+            canvas.drawBitmap(bmp, null, dst, backButtonDstPaint)
         }
     }
 

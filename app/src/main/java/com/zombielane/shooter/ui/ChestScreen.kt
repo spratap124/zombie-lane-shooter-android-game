@@ -88,8 +88,6 @@ class ChestScreen {
 
     private val mergeBtnFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val mergeGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-    private val backCirclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val backStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
 
     private val tmpCard = RectF()
     private val tmpInner = RectF()
@@ -128,18 +126,9 @@ class ChestScreen {
         bgPaint.color = Color.parseColor("#0A0E18")
         canvas.drawRect(0f, 0f, w, h, bgPaint)
 
-        val backSize = 46f * s
+        val backSize = 68f * s
         backBtnRect.set(safeArea.left + 8f * s, safeArea.top + 8f * s, safeArea.left + 8f * s + backSize, safeArea.top + 8f * s + backSize)
-        backCirclePaint.color = Color.parseColor("#1A2238")
-        canvas.drawRoundRect(backBtnRect, 12f * s, 12f * s, backCirclePaint)
-        backStrokePaint.color = Color.parseColor("#3D5270")
-        backStrokePaint.strokeWidth = 2f * s
-        canvas.drawRoundRect(backBtnRect, 12f * s, 12f * s, backStrokePaint)
-        titlePaint.textSize = 32f * s
-        titlePaint.color = Color.WHITE
-        titlePaint.setShadowLayer(5f * s, 0f, 2f * s, Color.BLACK)
-        canvas.drawText("←", backBtnRect.centerX(), backBtnRect.centerY() + 11f * s, titlePaint)
-        titlePaint.clearShadowLayer()
+        MenuUiAssets.drawBackButton(canvas, backBtnRect, menuUi.backButton)
 
         val titleY = safeArea.top + 58f * s
         titlePaint.textSize = 36f * s

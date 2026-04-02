@@ -38,6 +38,10 @@ class AdManager(private val activity: Activity) {
     private var interstitialAd: InterstitialAd? = null
     private var rewardedAd: RewardedAd? = null
     private var rewardListener: RewardListener? = null
+
+    private val rewardedLoadLock = Any()
+    private var rewardedAdLoading = false
+    private val rewardedLoadCallbacks = ArrayList<(Boolean) -> Unit>()
     private var pendingRewardType: String? = null
 
     private var deathCount = 0
@@ -131,30 +135,67 @@ class AdManager(private val activity: Activity) {
 
     // ── Rewarded ────────────────────────────────────────────
 
-    private fun loadRewarded() {
+    /**
+     * Invokes [callback] on the main thread when a rewarded ad is available ([true]) or load failed / SDK down ([false]).
+     * Coalesces overlapping loads so only one [RewardedAd.load] runs; multiple waiters are all notified together.
+     */
+    fun ensureRewardedLoaded(callback: (Boolean) -> Unit) {
+        if (!isInitialized) {
+            activity.runOnUiThread { callback(false) }
+            return
+        }
+        synchronized(rewardedLoadLock) {
+            if (rewardedAd != null) {
+                activity.runOnUiThread { callback(true) }
+                return
+            }
+            rewardedLoadCallbacks.add(callback)
+            if (rewardedAdLoading) {
+                return
+            }
+            rewardedAdLoading = true
+        }
         RewardedAd.load(
             activity,
             REWARDED_ID,
             AdRequest.Builder().build(),
             object : RewardedAdLoadCallback() {
                 override fun onAdLoaded(ad: RewardedAd) {
-                    rewardedAd = ad
+                    val toNotify = synchronized(rewardedLoadLock) {
+                        rewardedAd = ad
+                        rewardedAdLoading = false
+                        rewardedLoadCallbacks.toList().also { rewardedLoadCallbacks.clear() }
+                    }
                     Log.d(TAG, "Rewarded ad loaded")
+                    activity.runOnUiThread {
+                        toNotify.forEach { it(true) }
+                    }
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError) {
-                    rewardedAd = null
+                    val toNotify = synchronized(rewardedLoadLock) {
+                        rewardedAd = null
+                        rewardedAdLoading = false
+                        rewardedLoadCallbacks.toList().also { rewardedLoadCallbacks.clear() }
+                    }
                     Log.w(TAG, "Rewarded ad failed to load: ${error.message}")
+                    activity.runOnUiThread {
+                        toNotify.forEach { it(false) }
+                    }
                 }
             }
         )
+    }
+
+    private fun loadRewarded() {
+        ensureRewardedLoaded { }
     }
 
     fun isRewardedReady(): Boolean = rewardedAd != null
 
     /** Loads a rewarded ad if the SDK is up and the cache is empty (menu, chests, after a failed show). */
     fun preloadRewarded() {
-        if (isInitialized && rewardedAd == null) loadRewarded()
+        if (isInitialized && rewardedAd == null) ensureRewardedLoaded { }
     }
 
     fun showRewarded(listener: RewardListener) {

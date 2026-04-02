@@ -981,18 +981,39 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 }
             }
             GameState.PLAYING -> drawGameplay(canvas)
-            GameState.PAUSED -> { drawGameplay(canvas); pauseScreen.draw(canvas, safeArea, score, sessionCoins) }
+            GameState.PAUSED -> {
+                drawGameplay(canvas)
+                pauseScreen.draw(canvas, safeArea, score, sessionCoins, menuUiAssets.backButton)
+            }
             GameState.CONTINUE_OFFER -> {
                 drawGameplay(canvas)
-                continueOfferScreen.draw(canvas, safeArea, adManager?.isRewardedReady() == true)
+                continueOfferScreen.draw(
+                    canvas,
+                    safeArea,
+                    adManager?.isRewardedReady() == true,
+                    menuUiAssets.backButton
+                )
             }
             GameState.GAME_OVER -> {
                 drawGameplay(canvas, drawFloatingTexts = false)
                 drawGameOverOverlay(canvas)
                 floatingTexts.forEach { it.draw(canvas) }
             }
-            GameState.SETTINGS -> settingsScreen.draw(canvas, safeArea, settingsManager)
-            GameState.SHOP -> shopScreen.draw(canvas, safeArea, upgradeManager.totalCoins, shooterManager, playerAssets)
+            GameState.SETTINGS -> settingsScreen.draw(
+                canvas,
+                safeArea,
+                settingsManager,
+                menuUiAssets.backButton
+            )
+            GameState.SHOP -> shopScreen.draw(
+                canvas,
+                safeArea,
+                upgradeManager.totalCoins,
+                shooterManager,
+                playerAssets,
+                menuUiAssets.weaponShopCoin,
+                menuUiAssets.backButton
+            )
             GameState.DAILY_MISSIONS -> {
                 val nowDm = System.currentTimeMillis()
                 dailyMissionManager.ensurePeriod(nowDm)
@@ -1070,7 +1091,8 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             rewardedAdReady = adManager?.isRewardedReady() == true,
             nowMs = System.currentTimeMillis(),
             overlayEnterMs = gameOverOverlayEnterMs,
-            wasNewHighScore = gameOverWasNewHighScore
+            wasNewHighScore = gameOverWasNewHighScore,
+            backButton = menuUiAssets.backButton
         )
     }
 
@@ -1111,8 +1133,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 return
             }
         }
-        if (dailyMissionsScreen.backBtnRect.contains(tx, ty) ||
-            dailyMissionsScreen.wideBackBtnRect.contains(tx, ty)
+        if (dailyMissionsScreen.backBtnRect.contains(tx, ty)
         ) {
             state = GameState.MENU
         }
@@ -1475,15 +1496,29 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             return
         }
         if (chestSkipAdInFlight) return
-        if (!am.isRewardedReady()) {
-            chestManager.skipTimerForSlot(slotIndex)
-            am.preloadRewarded()
+        if (am.isRewardedReady()) {
+            chestSkipAdInFlight = true
+            am.showRewardedAd { earned, failedToShow ->
+                chestSkipAdInFlight = false
+                if (earned || failedToShow) chestManager.skipTimerForSlot(slotIndex)
+            }
             return
         }
+        // Wait for a load instead of granting skip with no ad (common cause of “Skip did nothing”).
         chestSkipAdInFlight = true
-        am.showRewardedAd { earned, failedToShow ->
-            chestSkipAdInFlight = false
-            if (earned || failedToShow) chestManager.skipTimerForSlot(slotIndex)
+        am.ensureRewardedLoaded { success ->
+            if (!success) {
+                chestSkipAdInFlight = false
+                return@ensureRewardedLoaded
+            }
+            if (state != GameState.CHESTS || chestSelectedSlot != slotIndex || !am.isRewardedReady()) {
+                chestSkipAdInFlight = false
+                return@ensureRewardedLoaded
+            }
+            am.showRewardedAd { earned, failedToShow ->
+                chestSkipAdInFlight = false
+                if (earned || failedToShow) chestManager.skipTimerForSlot(slotIndex)
+            }
         }
     }
 

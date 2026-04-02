@@ -31,11 +31,6 @@ class ShopScreen {
         textAlign = Paint.Align.CENTER
     }
 
-    private val coinIconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#FFD600")
-        style = Paint.Style.FILL
-    }
-
     private val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val cardBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -61,17 +56,6 @@ class ShopScreen {
         textAlign = Paint.Align.LEFT
     }
 
-    private val backBtnPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#37474F")
-        style = Paint.Style.FILL
-    }
-
-    private val btnTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
-        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
-        textAlign = Paint.Align.CENTER
-    }
-
     var shooterCardRects = mutableListOf<RectF>()
     var backBtnRect = RectF()
 
@@ -80,7 +64,9 @@ class ShopScreen {
         safeArea: RectF,
         totalCoins: Int,
         shooterManager: ShooterManager,
-        playerAssets: PlayerAssets?
+        playerAssets: PlayerAssets?,
+        coinIcon: Bitmap,
+        backButton: Bitmap
     ) {
         val w = canvas.width.toFloat()
         val cx = w / 2f
@@ -88,31 +74,43 @@ class ShopScreen {
 
         canvas.drawRect(0f, 0f, w, canvas.height.toFloat(), bgPaint)
 
-        titlePaint.textSize = 52f * s
-        coinPaint.textSize = 34f * s
-        namePaint.textSize = 36f * s
-        tagPaint.textSize = 26f * s
-        statusPaint.textSize = 28f * s
-        detailPaint.textSize = 22f * s
-        btnTextPaint.textSize = 38f * s
-        cardBorderPaint.strokeWidth = 3f * s
+        titlePaint.textSize = 64f * s
+        coinPaint.textSize = 44f * s
+        namePaint.textSize = 50f * s
+        tagPaint.textSize = 34f * s
+        statusPaint.textSize = 36f * s
+        detailPaint.textSize = 30f * s
+        cardBorderPaint.strokeWidth = 4f * s
 
-        var yPos = safeArea.top + 24f * s
+        val backSize = 68f * s
+        backBtnRect.set(
+            safeArea.left + 8f * s,
+            safeArea.top + 8f * s,
+            safeArea.left + 8f * s + backSize,
+            safeArea.top + 8f * s + backSize
+        )
+        MenuUiAssets.drawBackButton(canvas, backBtnRect, backButton)
 
-        canvas.drawText("WEAPON SHOP", cx, yPos + 48f * s, titlePaint)
-        yPos += 48f * s + 32f * s
+        var yPos = safeArea.top + 8f * s + backSize + 20f * s
 
-        canvas.drawCircle(cx - 50f * s, yPos - 10f * s, 14f * s, coinIconPaint)
-        canvas.drawText("$totalCoins", cx + 12f * s, yPos, coinPaint)
-        yPos += 40f * s
+        val titleBaseline = yPos + 58f * s
+        canvas.drawText("WEAPON SHOP", cx, titleBaseline, titlePaint)
+        val titleFm = titlePaint.fontMetrics
+        // Fixed 24*s after baseline was shorter than the title's painted height — coin row overlapped "WEAPON SHOP".
+        yPos = titleBaseline + titleFm.descent + 36f * s
+
+        val headerCoinD = 52f * s
+        drawCoin(canvas, coinIcon, cx - 58f * s, yPos - 12f * s, headerCoinD)
+        canvas.drawText("$totalCoins", cx + 18f * s, yPos, coinPaint)
+        yPos += 52f * s
 
         val allShooters = Shooter.ALL
-        val cardH = 110f * s
-        val cardGap = 14f * s
-        val cardMargin = 20f * s
+        val cardH = 188f * s
+        val cardGap = 28f * s
+        val cardMargin = 14f * s
         val cardLeft = safeArea.left + cardMargin
         val cardRight = safeArea.right - cardMargin
-        val iconSize = 70f * s
+        val iconSize = 120f * s
 
         shooterCardRects.clear()
 
@@ -131,14 +129,14 @@ class ShopScreen {
                 isAvailable -> Color.parseColor("#222240")
                 else -> Color.parseColor("#181830")
             }
-            canvas.drawRoundRect(rect, 16f * s, 16f * s, cardPaint)
+            canvas.drawRoundRect(rect, 24f * s, 24f * s, cardPaint)
 
             if (isEquipped) {
                 cardBorderPaint.color = shooter.bulletColor
-                canvas.drawRoundRect(rect, 16f * s, 16f * s, cardBorderPaint)
+                canvas.drawRoundRect(rect, 24f * s, 24f * s, cardBorderPaint)
             }
 
-            val iconLeft = cardLeft + 14f * s
+            val iconLeft = cardLeft + 20f * s
             val iconTop = yPos + (cardH - iconSize) / 2f
             val bmp = playerAssets?.get(st)
             if (bmp != null) {
@@ -149,24 +147,24 @@ class ShopScreen {
                     color = if (isAvailable) shooter.bulletColor else Color.parseColor("#455A64")
                     style = Paint.Style.FILL
                 }
-                canvas.drawCircle(iconLeft + iconSize / 2f, yPos + cardH / 2f, 20f * s, dotPaint)
+                canvas.drawCircle(iconLeft + iconSize / 2f, yPos + cardH / 2f, 32f * s, dotPaint)
             }
 
-            val textLeft = iconLeft + iconSize + 18f * s
-            val nameY = yPos + cardH * 0.35f
+            val textLeft = iconLeft + iconSize + 26f * s
+            val nameY = yPos + cardH * 0.33f
             namePaint.color = if (isAvailable) Color.WHITE else Color.parseColor("#607D8B")
             canvas.drawText(shooter.name, textLeft, nameY, namePaint)
 
             tagPaint.color = if (isAvailable) Color.parseColor("#90A4AE") else Color.parseColor("#455A64")
-            canvas.drawText(shooter.tagline, textLeft, nameY + 30f * s, tagPaint)
+            canvas.drawText(shooter.tagline, textLeft, nameY + 42f * s, tagPaint)
 
             val fireLabel = "Fire: ${shooter.baseFireRateMs}ms"
             val dmgLabel = "Dmg: x${shooter.damageMultiplier}"
             detailPaint.color = if (isAvailable) Color.parseColor("#607D8B") else Color.parseColor("#37474F")
-            canvas.drawText("$fireLabel  |  $dmgLabel", textLeft, nameY + 56f * s, detailPaint)
+            canvas.drawText("$fireLabel  |  $dmgLabel", textLeft, nameY + 80f * s, detailPaint)
 
-            val statusX = cardRight - 18f * s
-            val statusY = yPos + cardH / 2f + 8f * s
+            val statusX = cardRight - 26f * s
+            val statusY = yPos + cardH / 2f + 12f * s
             when {
                 isEquipped -> {
                     statusPaint.color = shooter.bulletColor
@@ -185,23 +183,29 @@ class ShopScreen {
                 else -> {
                     statusPaint.color = Color.parseColor("#FFD600")
                     val costStr = formatCost(shooter.unlockCost)
-                    canvas.drawText(costStr, statusX, statusY - 14f * s, statusPaint)
+                    val costBaseline = statusY - 18f * s
+                    val costTw = statusPaint.measureText(costStr)
+                    val rowCoinD = 44f * s
+                    val coinGap = 10f * s
+                    val coinCx = statusX - costTw - coinGap - rowCoinD / 2f
+                    val coinCy = costBaseline - 11f * s
+                    drawCoin(canvas, coinIcon, coinCx, coinCy, rowCoinD)
+                    canvas.drawText(costStr, statusX, costBaseline, statusPaint)
                     statusPaint.color = Color.parseColor("#78909C")
-                    statusPaint.textSize = 22f * s
-                    canvas.drawText("or Watch Ad", statusX, statusY + 14f * s, statusPaint)
                     statusPaint.textSize = 28f * s
+                    canvas.drawText("or Watch Ad", statusX, statusY + 18f * s, statusPaint)
+                    statusPaint.textSize = 36f * s
                 }
             }
 
             yPos += cardH + cardGap
         }
+    }
 
-        yPos += 20f * s
-        val backW = safeArea.width() * 0.50f
-        val backH = 66f * s
-        backBtnRect = RectF(cx - backW / 2f, yPos, cx + backW / 2f, yPos + backH)
-        canvas.drawRoundRect(backBtnRect, 16f * s, 16f * s, backBtnPaint)
-        canvas.drawText("BACK", cx, yPos + backH * 0.65f, btnTextPaint)
+    private fun drawCoin(canvas: Canvas, bmp: Bitmap, centerX: Float, centerY: Float, diameter: Float) {
+        val r = diameter / 2f
+        val dst = RectF(centerX - r, centerY - r, centerX + r, centerY + r)
+        canvas.drawBitmap(bmp, null, dst, bitmapPaint)
     }
 
     private fun formatCost(cost: Int): String = when {

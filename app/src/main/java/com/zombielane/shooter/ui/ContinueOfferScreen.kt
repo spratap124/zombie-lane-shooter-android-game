@@ -1,5 +1,6 @@
 package com.zombielane.shooter.ui
 
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -59,18 +60,11 @@ class ContinueOfferScreen {
         textAlign = Paint.Align.CENTER
     }
 
-    private val backCirclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-    private val backStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-    private val backArrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
-        textAlign = Paint.Align.CENTER
-    }
-
     var backBtnRect = RectF()
     var watchAdBtnRect = RectF()
     var noBtnRect = RectF()
 
-    fun draw(canvas: Canvas, safeArea: RectF, adReady: Boolean) {
+    fun draw(canvas: Canvas, safeArea: RectF, adReady: Boolean, backButton: Bitmap) {
         val w = canvas.width.toFloat()
         val h = canvas.height.toFloat()
         val cx = w / 2f
@@ -78,23 +72,14 @@ class ContinueOfferScreen {
 
         canvas.drawRect(0f, 0f, w, h, dimPaint)
 
-        val backSize = 46f * s
+        val backSize = 68f * s
         backBtnRect.set(
             safeArea.left + 8f * s,
             safeArea.top + 8f * s,
             safeArea.left + 8f * s + backSize,
             safeArea.top + 8f * s + backSize
         )
-        backCirclePaint.color = Color.parseColor("#1A2238")
-        canvas.drawRoundRect(backBtnRect, 12f * s, 12f * s, backCirclePaint)
-        backStrokePaint.color = Color.parseColor("#3D5270")
-        backStrokePaint.strokeWidth = 2f * s
-        canvas.drawRoundRect(backBtnRect, 12f * s, 12f * s, backStrokePaint)
-        backArrowPaint.textSize = 32f * s
-        backArrowPaint.color = Color.WHITE
-        backArrowPaint.setShadowLayer(5f * s, 0f, 2f * s, Color.BLACK)
-        canvas.drawText("←", backBtnRect.centerX(), backBtnRect.centerY() + 11f * s, backArrowPaint)
-        backArrowPaint.clearShadowLayer()
+        MenuUiAssets.drawBackButton(canvas, backBtnRect, backButton)
 
         val cardW = (safeArea.width() * 0.82f).coerceAtMost(520f * s)
         val btnH = 52f * s
