@@ -46,6 +46,14 @@ class PauseScreen {
         textAlign = Paint.Align.CENTER
     }
 
+    private val backCirclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val backStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val backArrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
+        textAlign = Paint.Align.CENTER
+    }
+
+    var backBtnRect = RectF()
     var resumeBtnRect = RectF()
     var settingsBtnRect = RectF()
     var quitBtnRect = RectF()
@@ -61,6 +69,24 @@ class PauseScreen {
         infoPaint.textSize = 32f * s
 
         canvas.drawRect(0f, 0f, w, h, overlayPaint)
+
+        val backSize = 46f * s
+        backBtnRect.set(
+            safeArea.left + 8f * s,
+            safeArea.top + 8f * s,
+            safeArea.left + 8f * s + backSize,
+            safeArea.top + 8f * s + backSize
+        )
+        backCirclePaint.color = Color.parseColor("#1A2238")
+        canvas.drawRoundRect(backBtnRect, 12f * s, 12f * s, backCirclePaint)
+        backStrokePaint.color = Color.parseColor("#3D5270")
+        backStrokePaint.strokeWidth = 2f * s
+        canvas.drawRoundRect(backBtnRect, 12f * s, 12f * s, backStrokePaint)
+        backArrowPaint.textSize = 32f * s
+        backArrowPaint.color = Color.WHITE
+        backArrowPaint.setShadowLayer(5f * s, 0f, 2f * s, Color.BLACK)
+        canvas.drawText("←", backBtnRect.centerX(), backBtnRect.centerY() + 11f * s, backArrowPaint)
+        backArrowPaint.clearShadowLayer()
 
         var yPos = safeArea.top + safeArea.height() * 0.2f
 

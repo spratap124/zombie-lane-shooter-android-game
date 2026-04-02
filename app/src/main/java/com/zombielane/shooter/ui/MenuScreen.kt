@@ -208,6 +208,17 @@ class MenuScreen {
         textAlign = Paint.Align.CENTER
     }
 
+    private val dailyMissionBtnPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#00838F")
+        style = Paint.Style.FILL
+    }
+
+    private val dailyMissionBtnStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 2.5f
+        color = Color.parseColor("#4DD0E1")
+    }
+
     private val bgTopPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
 
     private val gearPath = Path()
@@ -219,6 +230,7 @@ class MenuScreen {
     var shopBtnRect = RectF()
     var settingsBtnRect = RectF()
     var chestsNavRect = RectF()
+    var dailyMissionsBtnRect = RectF()
     var streakOkRect = RectF()
 
     private var frameCount = 0L
@@ -353,29 +365,23 @@ class MenuScreen {
 
         val bannerReserve = (120f * s).coerceIn(100f, 168f)
 
-        // Top bar: high score + coins
-        highScorePaint.textSize = 34f * s
-        infoPaint.textSize = 22f * s
-        if (highScore > 0) {
-            highScorePaint.setShadowLayer(8f * s, 0f, 2f * s, Color.BLACK)
-            canvas.drawText(
-                "BEST $highScore",
-                safeArea.left + padH,
-                safeArea.top + 42f * s,
-                highScorePaint
-            )
-            highScorePaint.clearShadowLayer()
-        }
+        // Top bar: coins top-left, settings top-right (above ad banner; avoids tiny screens).
+        val coinAnchorY = safeArea.top + 40f * s
+        val settingsSize = (88f * s).coerceIn(72f, 112f)
+        val stRight = safeArea.right - padH
+        val stTop = coinAnchorY - settingsSize / 2f
+        settingsBtnRect.set(stRight - settingsSize, stTop, stRight, stTop + settingsSize)
+        drawBitmapFit(canvas, menuUi.settingsIcon, settingsBtnRect)
+
         val coinBmp = menuUi.coin
         val coinDraw = coinBmp.width * coinSpin
         coinPaint.textSize = 36f * s
         coinPaint.color = Color.parseColor("#FFE082")
         val coinStr = totalCoins.toString()
-        val coinTextW = coinPaint.measureText(coinStr)
         val coinGap = 14f * s
-        val coinCy = safeArea.top + 36f * s + coinBob
-        val textRight = safeArea.right - padH
-        val coinCx = textRight - coinTextW - coinGap - coinDraw / 2f
+        val coinLeft = safeArea.left + padH
+        val coinCx = coinLeft + coinDraw / 2f
+        val coinCy = coinAnchorY + coinBob
         tmpRect.set(
             coinCx - coinDraw / 2f,
             coinCy - coinDraw / 2f,
@@ -387,11 +393,24 @@ class MenuScreen {
         coinPaint.setShadowLayer(8f * s, 0f, 2f * s, Color.BLACK)
         canvas.drawText(
             coinStr,
-            coinCx + coinDraw / 2f + coinGap,
+            coinLeft + coinDraw + coinGap,
             coinCy + 12f * s,
             coinPaint
         )
         coinPaint.clearShadowLayer()
+
+        highScorePaint.textSize = 34f * s
+        if (highScore > 0) {
+            highScorePaint.setShadowLayer(8f * s, 0f, 2f * s, Color.BLACK)
+            canvas.drawText(
+                "BEST $highScore",
+                safeArea.left + padH,
+                coinAnchorY + 48f * s,
+                highScorePaint
+            )
+            highScorePaint.clearShadowLayer()
+        }
+        infoPaint.textSize = 22f * s
 
         // Title + glow pulse + scale
         var yPos = safeArea.top + safeArea.height() * 0.055f
@@ -484,7 +503,23 @@ class MenuScreen {
             yPos += 36f * s
         }
 
-        yPos += 22f * s
+        val dmH = 48f * s
+        dailyMissionsBtnRect.set(safeArea.left + padH, yPos, safeArea.right - padH, yPos + dmH)
+        canvas.drawRoundRect(dailyMissionsBtnRect, 12f * s, 12f * s, dailyMissionBtnPaint)
+        dailyMissionBtnStrokePaint.strokeWidth = 2.5f * s
+        canvas.drawRoundRect(dailyMissionsBtnRect, 12f * s, 12f * s, dailyMissionBtnStrokePaint)
+        btnTextPaint.textSize = 26f * s
+        btnTextPaint.color = Color.WHITE
+        btnTextPaint.setShadowLayer(4f * s, 0f, 2f * s, Color.BLACK)
+        canvas.drawText(
+            "DAILY MISSIONS",
+            dailyMissionsBtnRect.centerX(),
+            dailyMissionsBtnRect.centerY() + 9f * s,
+            btnTextPaint
+        )
+        btnTextPaint.clearShadowLayer()
+
+        yPos += dmH + 18f * s
         val playW = safeArea.width() * 0.88f
         val bmpAr = menuUi.playButton.height.toFloat() / menuUi.playButton.width.coerceAtLeast(1)
         var playH = playW * bmpAr
@@ -504,10 +539,7 @@ class MenuScreen {
         shopBtnRect.set(cx - weaponW / 2f, yPos, cx + weaponW / 2f, yPos + weaponH)
         drawBitmapFit(canvas, menuUi.weaponsButton, shopBtnRect)
 
-        yPos += weaponH + 20f * s
-        val settingsSize = (96f * s).coerceIn(76f, 128f)
-        settingsBtnRect.set(cx - settingsSize / 2f, yPos, cx + settingsSize / 2f, yPos + settingsSize)
-        drawBitmapFit(canvas, menuUi.settingsIcon, settingsBtnRect)
+        yPos += weaponH + 28f * s
 
         infoPaint.textSize = 24f * s
         infoPaint.textAlign = Paint.Align.LEFT

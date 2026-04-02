@@ -8,5 +8,6 @@ enum class GameState {
     GAME_OVER,
     SETTINGS,
     SHOP,
-    CHESTS
+    CHESTS,
+    DAILY_MISSIONS
 }

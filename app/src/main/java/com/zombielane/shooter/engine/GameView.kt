@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Typeface
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -15,6 +16,7 @@ import android.view.SurfaceView
 import androidx.core.content.ContextCompat
 import com.zombielane.shooter.ads.AdManager
 import com.zombielane.shooter.data.ChestGrantResult
+import com.zombielane.shooter.data.DailyMissionManager
 import com.zombielane.shooter.data.ChestManager
 import com.zombielane.shooter.data.ChestOpenResult
 import com.zombielane.shooter.data.ChestAnimState
@@ -73,10 +75,12 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     val shooterManager = ShooterManager(context)
     val chestManager = ChestManager(context)
     private val streakManager = StreakManager(context)
+    private val dailyMissionManager = DailyMissionManager(context)
     private val runBuffManager = RunBuffManager(context)
     private val chestScreen = ChestScreen()
     private val chestRevealUI = ChestRevealUI()
     private val chestOpeningAnimator = ChestOpeningAnimator()
+    private val dailyMissionsScreen = DailyMissionsScreen()
     private val chestBurstParticles = mutableListOf<Particle>()
     private val chestSlotVisual = Array(ChestManager.MAX_SLOTS) { ChestVisualState.CLOSED }
     private val playerAssets = PlayerAssets(resources)
@@ -143,6 +147,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private var enemiesKilled = 0
     private var maxCombo = 0
 
+    private var missionCompleteBannerUntilMs = 0L
+    private var missionCompleteBannerSub = ""
+
     // FPS counter
     private var frameCount = 0
     private var lastFpsTimeMs = 0L
@@ -159,6 +166,21 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private val nearDeathOverlayPaint = Paint().apply {
         color = Color.parseColor("#18FF0000")
         style = Paint.Style.FILL
+    }
+
+    private val missionBannerDimPaint = Paint().apply {
+        color = Color.parseColor("#AA000000")
+        style = Paint.Style.FILL
+    }
+    private val missionBannerTitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
+        textAlign = Paint.Align.CENTER
+    }
+    private val missionBannerSubPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#E0E0E0")
+        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
+        textAlign = Paint.Align.CENTER
     }
 
     init {
@@ -270,6 +292,10 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             GameState.GAME_OVER -> {
                 state = GameState.MENU
                 onEnteredMainMenu()
+                true
+            }
+            GameState.DAILY_MISSIONS -> {
+                state = GameState.MENU
                 true
             }
             GameState.MENU -> false
@@ -506,6 +532,13 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             ))
         }
 
+        dailyMissionManager.recordStageSnapshot(
+            stageManager.currentStage.stageNumber,
+            upgradeManager,
+            chestManager,
+            now
+        )
+
         if (player.isDead) {
             if (!hasUsedContinue) {
                 openContinueOffer()
@@ -653,6 +686,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             val type = PowerUpType.entries[Random.nextInt(PowerUpType.entries.size)]
             powerUps.add(PowerUp(enemy.x + enemy.width / 2f, enemy.y + enemy.height / 2f, type))
         }
+
+        val nowMs = System.currentTimeMillis()
+        dailyMissionManager.recordEnemyKilled(shooterManager.equipped, upgradeManager, chestManager, nowMs)
     }
 
     private fun checkPowerUpCollisions() {
@@ -673,6 +709,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             PowerUpType.SHIELD -> { player.shielded = true; label = "SHIELD!"; color = Color.parseColor("#2196F3") }
             PowerUpType.BOMB -> {
                 // Must update stage manager (boss defeated, kill counts) or boss fights desync from real enemies on screen.
+                var bombKills = 0
                 for (enemy in enemies.toList()) {
                     if (!enemy.active) continue
                     score += enemy.scoreValue
@@ -683,6 +720,17 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                         else -> stageManager.onEnemyKilled(false)
                     }
                     enemy.active = false
+                    bombKills++
+                }
+                if (bombKills > 0) {
+                    val nowBomb = System.currentTimeMillis()
+                    dailyMissionManager.recordEnemyKillsDelta(
+                        bombKills,
+                        shooterManager.equipped,
+                        upgradeManager,
+                        chestManager,
+                        nowBomb
+                    )
                 }
                 screenShakeFrames = 20; screenShakeIntensity = 12f; label = "BOMB!"; color = Color.parseColor("#F44336")
             }
@@ -840,6 +888,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                     if (pop != null) pop.message else null,
                     nowMs
                 )
+                if (nowMs < missionCompleteBannerUntilMs) drawMissionCompleteBanner(canvas)
             }
             GameState.CHESTS -> {
                 val now = System.currentTimeMillis()
@@ -885,6 +934,20 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             }
             GameState.SETTINGS -> settingsScreen.draw(canvas, safeArea, settingsManager)
             GameState.SHOP -> shopScreen.draw(canvas, safeArea, upgradeManager.totalCoins, shooterManager, playerAssets)
+            GameState.DAILY_MISSIONS -> {
+                val nowDm = System.currentTimeMillis()
+                dailyMissionManager.ensurePeriod(nowDm)
+                dailyMissionsScreen.draw(
+                    canvas,
+                    safeArea,
+                    dailyMissionManager.missionRows(nowDm),
+                    nowDm,
+                    menuUiAssets,
+                    dailyMissionManager.claimedMissionCount(),
+                    dailyMissionManager.milestoneBits()
+                )
+                if (nowDm < missionCompleteBannerUntilMs) drawMissionCompleteBanner(canvas)
+            }
         }
     }
 
@@ -925,6 +988,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             val isTemp = !shooterManager.isUnlocked(shooterManager.equipped) && shooterManager.isTemporaryActive(shooterManager.equipped)
             val stage = stageManager.currentStage
             hud.drawGameHud(canvas, score, sessionCoins, player.health.coerceAtLeast(0), player.maxHealth, safeArea, comboTracker, eventManager, settingsManager.showFps, currentFps, shooter.name, shooter.bulletColor, if (isTemp) tempRemaining else -1L, stage.stageNumber, stage.name, stageManager.stageProgress, stage.isEndlessSector)
+            drawMissionCompleteBanner(canvas)
         }
     }
 
@@ -968,16 +1032,48 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             GameState.SETTINGS -> if (event.action == MotionEvent.ACTION_DOWN) handleSettingsTouch(tx, ty)
             GameState.SHOP -> if (event.action == MotionEvent.ACTION_DOWN) handleShopTouch(tx, ty)
             GameState.CHESTS -> if (event.action == MotionEvent.ACTION_DOWN) handleChestScreenTouch(tx, ty)
+            GameState.DAILY_MISSIONS -> if (event.action == MotionEvent.ACTION_DOWN) handleDailyMissionsTouch(tx, ty)
         }
         return true
     }
 
+    private fun handleDailyMissionsTouch(tx: Float, ty: Float) {
+        val now = System.currentTimeMillis()
+        if (now < missionCompleteBannerUntilMs) {
+            missionCompleteBannerUntilMs = 0L
+            return
+        }
+        for (i in dailyMissionsScreen.claimBtnRects.indices) {
+            if (dailyMissionsScreen.claimBtnRects[i].contains(tx, ty)) {
+                dailyMissionManager.claimMission(i, upgradeManager, chestManager, now)?.let { sub ->
+                    missionCompleteBannerSub = sub
+                    missionCompleteBannerUntilMs = now + 5000L
+                }
+                return
+            }
+        }
+        if (dailyMissionsScreen.backBtnRect.contains(tx, ty) ||
+            dailyMissionsScreen.wideBackBtnRect.contains(tx, ty)
+        ) {
+            state = GameState.MENU
+        }
+    }
+
     private fun handleMenuTouch(tx: Float, ty: Float) {
+        val now = System.currentTimeMillis()
+        if (now < missionCompleteBannerUntilMs) {
+            missionCompleteBannerUntilMs = 0L
+            return
+        }
         if (streakPopup != null) {
             if (menuScreen.streakOkRect.contains(tx, ty)) streakPopup = null
             return
         }
         when {
+            menuScreen.dailyMissionsBtnRect.contains(tx, ty) -> {
+                previousState = GameState.MENU
+                state = GameState.DAILY_MISSIONS
+            }
             menuScreen.chestsNavRect.contains(tx, ty) -> {
                 previousState = GameState.MENU
                 chestMergeMode = false
@@ -1002,6 +1098,11 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun handlePlayingTouch(action: Int, tx: Float, ty: Float) {
+        val now = System.currentTimeMillis()
+        if (action == MotionEvent.ACTION_DOWN && now < missionCompleteBannerUntilMs) {
+            missionCompleteBannerUntilMs = 0L
+            return
+        }
         if (action == MotionEvent.ACTION_DOWN && hud.pauseBtnRect.contains(tx, ty)) {
             state = GameState.PAUSED
             return
@@ -1011,6 +1112,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     private fun handleContinueOfferTouch(tx: Float, ty: Float) {
         when {
+            continueOfferScreen.backBtnRect.contains(tx, ty) -> finalizeGameOver()
             continueOfferScreen.noBtnRect.contains(tx, ty) -> finalizeGameOver()
             continueOfferScreen.watchAdBtnRect.contains(tx, ty) -> {
                 if (adManager?.isRewardedReady() == true) {
@@ -1024,6 +1126,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     private fun handlePauseTouch(tx: Float, ty: Float) {
         when {
+            pauseScreen.backBtnRect.contains(tx, ty) -> { state = GameState.PLAYING; post { adManager?.hideBanner() } }
             pauseScreen.resumeBtnRect.contains(tx, ty) -> { state = GameState.PLAYING; post { adManager?.hideBanner() } }
             pauseScreen.settingsBtnRect.contains(tx, ty) -> {
                 previousState = GameState.PAUSED
@@ -1038,6 +1141,11 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun handleGameOverTouch(tx: Float, ty: Float) {
+        if (gameOverScreen.backBtnRect.contains(tx, ty)) {
+            state = GameState.MENU
+            onEnteredMainMenu()
+            return
+        }
         if (gameOverScreen.doubleRewardsBtnRect.contains(tx, ty)) {
             if (!gameOverDoubleCoinsUsed && gameOverEarnedCoins > 0 && !gameOverDoubleAdInFlight) {
                 if (adManager?.isRewardedReady() == true) {
@@ -1137,7 +1245,33 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun onEnteredMainMenu() {
+        val now = System.currentTimeMillis()
+        dailyMissionManager.ensurePeriod(now)
+        dailyMissionManager.syncCompletions(upgradeManager, chestManager, now)
         streakManager.onMenuEnter(chestManager)?.let { streakPopup = it }
+    }
+
+    private fun drawMissionCompleteBanner(canvas: Canvas) {
+        val now = System.currentTimeMillis()
+        if (now >= missionCompleteBannerUntilMs) return
+        val w = screenW.toFloat()
+        val h = screenH.toFloat()
+        canvas.drawRect(0f, 0f, w, h, missionBannerDimPaint)
+        val cx = w / 2f
+        val s = w / 1080f
+        missionBannerTitlePaint.textSize = 44f * s
+        missionBannerTitlePaint.setShadowLayer(10f * s, 0f, 3f * s, Color.BLACK)
+        canvas.drawText("Mission Complete!", cx, h * 0.42f, missionBannerTitlePaint)
+        missionBannerTitlePaint.clearShadowLayer()
+        missionBannerSubPaint.textSize = 26f * s
+        val lines = missionCompleteBannerSub.split('\n')
+        var y = h * 0.48f
+        for (line in lines) {
+            canvas.drawText(line, cx, y, missionBannerSubPaint)
+            y += 34f * s
+        }
+        missionBannerSubPaint.textSize = 22f * s
+        canvas.drawText("Tap to dismiss", cx, h * 0.62f, missionBannerSubPaint)
     }
 
     private fun updateChestRevealAnimation(now: Long, screenW: Int, screenH: Int) {

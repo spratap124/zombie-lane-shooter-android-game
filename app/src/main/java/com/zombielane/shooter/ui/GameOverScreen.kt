@@ -100,6 +100,14 @@ class GameOverScreen {
     var playAgainBtnRect = RectF()
     var menuBtnRect = RectF()
     var doubleRewardsBtnRect = RectF()
+    var backBtnRect = RectF()
+
+    private val backCirclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val backStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val backArrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
+        textAlign = Paint.Align.CENTER
+    }
 
     fun draw(
         canvas: Canvas,
@@ -300,7 +308,7 @@ class GameOverScreen {
         canvas.drawRoundRect(menuBtnRect, 16f * s, 16f * s, menuBtnStroke)
         btnLabelPaint.textSize = max(24f * s, sw * 0.04f).coerceAtMost(34f)
         btnLabelPaint.color = Color.parseColor("#CFD8DC")
-        canvas.drawText("MENU", menuBtnRect.centerX(), menuBtnRect.centerY() + max(8f * s, sw * 0.016f), btnLabelPaint)
+        canvas.drawText("BACK", menuBtnRect.centerX(), menuBtnRect.centerY() + max(8f * s, sw * 0.016f), btnLabelPaint)
         btnLabelPaint.color = Color.WHITE
 
         y += menuH + gap
