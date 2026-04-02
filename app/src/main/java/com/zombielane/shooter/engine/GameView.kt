@@ -225,9 +225,12 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         recalcSafeArea()
         backgroundManager.init(screenW, screenH)
 
-        state = GameState.MENU
+        // Do not reset [state] here: the surface is destroyed/recreated when the app is minimized
+        // or the screen sleeps; forcing MENU wiped an active run and let a new thread keep simulating.
         startThread()
-        post { onEnteredMainMenu() }
+        if (state == GameState.MENU) {
+            post { onEnteredMainMenu() }
+        }
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
@@ -248,11 +251,16 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun stopThread() {
-        gameThread?.running = false
+        val t = gameThread ?: return
+        // If [pause] ran first (activity backgrounded), the thread may be blocked on
+        // [GameThread]'s pause wait. Without [unpause], it never observes [running] = false
+        // and [join] blocks the UI thread — surface teardown never finishes and the app freezes.
+        t.running = false
+        t.unpause()
         var retry = true
         while (retry) {
             try {
-                gameThread?.join()
+                t.join()
                 retry = false
             } catch (_: InterruptedException) {
             }
@@ -261,13 +269,21 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     fun pause() {
+        // Match in-game pause: stop simulation while the activity is not in the foreground.
+        if (state == GameState.PLAYING) {
+            state = GameState.PAUSED
+            post { adManager?.showBanner() }
+        }
         gameThread?.pause()
         gameFeedback.pauseMusic()
     }
 
     fun resume() {
         gameThread?.unpause()
-        gameFeedback.resumeMusic()
+        // If the user left the game on the pause overlay, keep music off until they tap Resume.
+        if (state != GameState.PAUSED) {
+            gameFeedback.resumeMusic()
+        }
     }
 
     /** Release [SoundPool] / [android.media.MediaPlayer]; call from [android.app.Activity.onDestroy]. */
@@ -278,7 +294,12 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     fun onBackPressed(): Boolean {
         return when (state) {
             GameState.PLAYING -> { state = GameState.PAUSED; post { adManager?.showBanner() }; true }
-            GameState.PAUSED -> { state = GameState.PLAYING; post { adManager?.hideBanner() }; true }
+            GameState.PAUSED -> {
+                state = GameState.PLAYING
+                post { adManager?.hideBanner() }
+                gameFeedback.resumeMusic()
+                true
+            }
             GameState.SETTINGS -> { state = previousState; settingsScreen.confirmResetActive = false; true }
             GameState.SHOP -> { state = previousState; true }
             GameState.CHESTS -> {
@@ -1178,8 +1199,16 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     private fun handlePauseTouch(tx: Float, ty: Float) {
         when {
-            pauseScreen.backBtnRect.contains(tx, ty) -> { state = GameState.PLAYING; post { adManager?.hideBanner() } }
-            pauseScreen.resumeBtnRect.contains(tx, ty) -> { state = GameState.PLAYING; post { adManager?.hideBanner() } }
+            pauseScreen.backBtnRect.contains(tx, ty) -> {
+                state = GameState.PLAYING
+                post { adManager?.hideBanner() }
+                gameFeedback.resumeMusic()
+            }
+            pauseScreen.resumeBtnRect.contains(tx, ty) -> {
+                state = GameState.PLAYING
+                post { adManager?.hideBanner() }
+                gameFeedback.resumeMusic()
+            }
             pauseScreen.settingsBtnRect.contains(tx, ty) -> {
                 previousState = GameState.PAUSED
                 state = GameState.SETTINGS
