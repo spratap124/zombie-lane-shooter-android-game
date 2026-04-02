@@ -208,17 +208,6 @@ class MenuScreen {
         textAlign = Paint.Align.CENTER
     }
 
-    private val dailyMissionBtnPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#00838F")
-        style = Paint.Style.FILL
-    }
-
-    private val dailyMissionBtnStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 2.5f
-        color = Color.parseColor("#4DD0E1")
-    }
-
     private val bgTopPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
 
     private val gearPath = Path()
@@ -503,23 +492,19 @@ class MenuScreen {
             yPos += 36f * s
         }
 
-        val dmH = 48f * s
-        dailyMissionsBtnRect.set(safeArea.left + padH, yPos, safeArea.right - padH, yPos + dmH)
-        canvas.drawRoundRect(dailyMissionsBtnRect, 12f * s, 12f * s, dailyMissionBtnPaint)
-        dailyMissionBtnStrokePaint.strokeWidth = 2.5f * s
-        canvas.drawRoundRect(dailyMissionsBtnRect, 12f * s, 12f * s, dailyMissionBtnStrokePaint)
-        btnTextPaint.textSize = 26f * s
-        btnTextPaint.color = Color.WHITE
-        btnTextPaint.setShadowLayer(4f * s, 0f, 2f * s, Color.BLACK)
-        canvas.drawText(
-            "DAILY MISSIONS",
-            dailyMissionsBtnRect.centerX(),
-            dailyMissionsBtnRect.centerY() + 9f * s,
-            btnTextPaint
-        )
-        btnTextPaint.clearShadowLayer()
+        val dailyW = safeArea.width() * 0.86f
+        val dailyBmp = menuUi.dailyMissionsButton
+        val dailyAr = dailyBmp.height.toFloat() / dailyBmp.width.coerceAtLeast(1)
+        var dailyH = dailyW * dailyAr
+        dailyH = dailyH.coerceIn(safeArea.height() * 0.095f, safeArea.height() * 0.24f)
+        val dailyPulse = 1f + sin(frameCount * 0.055).toFloat() * 0.025f
+        val dw = dailyW * dailyPulse
+        val dh = dailyH * dailyPulse
+        tmpRect.set(cx - dw / 2f, yPos + (dailyH - dh) / 2f, cx + dw / 2f, yPos + (dailyH + dh) / 2f)
+        drawBitmapFit(canvas, dailyBmp, tmpRect)
+        dailyMissionsBtnRect.set(cx - dailyW / 2f, yPos, cx + dailyW / 2f, yPos + dailyH)
 
-        yPos += dmH + 18f * s
+        yPos += dailyH + 20f * s
         val playW = safeArea.width() * 0.88f
         val bmpAr = menuUi.playButton.height.toFloat() / menuUi.playButton.width.coerceAtLeast(1)
         var playH = playW * bmpAr

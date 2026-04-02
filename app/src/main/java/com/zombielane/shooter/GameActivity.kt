@@ -71,6 +71,9 @@ class GameActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (::gameView.isInitialized) {
+            gameView.releaseAudio()
+        }
         adManager.onDestroy()
         super.onDestroy()
     }

@@ -7,14 +7,11 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
-import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import androidx.core.content.ContextCompat
 import com.zombielane.shooter.ads.AdManager
+import com.zombielane.shooter.audio.GameFeedback
 import com.zombielane.shooter.data.ChestGrantResult
 import com.zombielane.shooter.data.DailyMissionManager
 import com.zombielane.shooter.data.ChestManager
@@ -72,6 +69,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private val shopScreen = ShopScreen()
     val upgradeManager = UpgradeManager(context)
     val settingsManager = SettingsManager(context)
+    private val gameFeedback = GameFeedback(context.applicationContext, settingsManager)
     val shooterManager = ShooterManager(context)
     val chestManager = ChestManager(context)
     private val streakManager = StreakManager(context)
@@ -258,8 +256,20 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         gameThread = null
     }
 
-    fun pause() { gameThread?.pause() }
-    fun resume() { gameThread?.unpause() }
+    fun pause() {
+        gameThread?.pause()
+        gameFeedback.pauseMusic()
+    }
+
+    fun resume() {
+        gameThread?.unpause()
+        gameFeedback.resumeMusic()
+    }
+
+    /** Release [SoundPool] / [android.media.MediaPlayer]; call from [android.app.Activity.onDestroy]. */
+    fun releaseAudio() {
+        gameFeedback.release()
+    }
 
     fun onBackPressed(): Boolean {
         return when (state) {
@@ -441,6 +451,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         if (now - lastFireTimeMs >= fireInterval) {
             lastFireTimeMs = now
             bullets.addAll(BulletManager.spawnPattern(shooter, player.gunTipX, player.gunTipY, upgradeManager.damage))
+            gameFeedback.onShoot()
         }
 
         val laneL = safeArea.left
@@ -597,7 +608,13 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 if (bullet.collidesWith(enemy)) {
                     bulletsToRemove.add(bullet)
                     enemy.takeDamage(bullet.damage)
-                    if (enemy.isDead) onEnemyKilled(enemy)
+                    if (enemy.isDead) {
+                        onEnemyKilled(enemy)
+                    } else {
+                        val c = comboTracker.combo
+                        if (enemy.type == EnemyType.BOSS) gameFeedback.onBossHit(c)
+                        else gameFeedback.onEnemyHit(c)
+                    }
                     break
                 }
             }
@@ -625,6 +642,8 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     private fun onEnemyKilled(enemy: Enemy) {
         comboTracker.onKill()
+        gameFeedback.onEnemyKill(comboTracker.combo)
+        if (enemy.coinValue > 0) gameFeedback.onCoinCollect()
         enemiesKilled++
         stageManager.onEnemyKilled(enemy.type == EnemyType.BOSS)
         if (comboTracker.combo > maxCombo) maxCombo = comboTracker.combo
@@ -702,6 +721,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun applyPowerUp(type: PowerUpType) {
+        gameFeedback.onPowerUp(type)
         val label: String
         val color: Int
         when (type) {
@@ -799,6 +819,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun finalizeGameOver() {
+        gameFeedback.onGameOver()
         state = GameState.GAME_OVER
         gameEndTimeMs = System.currentTimeMillis()
         gameOverEarnedCoins = sessionCoins
@@ -1181,7 +1202,10 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private fun handleSettingsTouch(tx: Float, ty: Float) {
         val toggles = settingsScreen.toggleRects
         if (toggles.size >= 1 && toggles[0].contains(tx, ty)) settingsManager.soundEnabled = !settingsManager.soundEnabled
-        if (toggles.size >= 2 && toggles[1].contains(tx, ty)) settingsManager.musicEnabled = !settingsManager.musicEnabled
+        if (toggles.size >= 2 && toggles[1].contains(tx, ty)) {
+            settingsManager.musicEnabled = !settingsManager.musicEnabled
+            gameFeedback.syncMusicWithSettings()
+        }
         if (toggles.size >= 3 && toggles[2].contains(tx, ty)) settingsManager.vibrationEnabled = !settingsManager.vibrationEnabled
         if (toggles.size >= 4 && toggles[3].contains(tx, ty)) settingsManager.showFps = !settingsManager.showFps
 
@@ -1245,6 +1269,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun onEnteredMainMenu() {
+        gameFeedback.ensureMenuMusic(context)
         val now = System.currentTimeMillis()
         dailyMissionManager.ensurePeriod(now)
         dailyMissionManager.syncCompletions(upgradeManager, chestManager, now)
@@ -1500,11 +1525,6 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     private fun chestVibrateOpen() {
-        if (!settingsManager.vibrationEnabled) return
-        val v = ContextCompat.getSystemService(context, Vibrator::class.java) ?: return
-        if (!v.hasVibrator()) return
-        if (Build.VERSION.SDK_INT >= 26) {
-            v.vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE))
-        } else @Suppress("DEPRECATION") v.vibrate(40)
+        gameFeedback.onUiRewardPulse()
     }
 }

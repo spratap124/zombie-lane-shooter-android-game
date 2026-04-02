@@ -17,6 +17,7 @@ class MenuUiAssets(resources: Resources) {
 
     val menuBackground: Bitmap
     val playButton: Bitmap
+    val dailyMissionsButton: Bitmap
     val coin: Bitmap
     val weaponsButton: Bitmap
     val settingsIcon: Bitmap
@@ -36,6 +37,13 @@ class MenuUiAssets(resources: Resources) {
 
         val playW = (wPx * 0.90f).toInt().coerceIn(320, 1080)
         playButton = decodeFitWidth(resources, R.drawable.play_button, playW)
+
+        val dailyW = (wPx * 0.86f).toInt().coerceIn(280, 1000)
+        dailyMissionsButton = try {
+            decodeAssetFitWidth(assets, "images/daily_missions_bg.png", dailyW)
+        } catch (_: Exception) {
+            placeholderWideButtonBitmap(dailyW, Color.parseColor("#00838F"))
+        }
 
         val weaponsW = (wPx * 0.76f).toInt().coerceIn(280, 960)
         weaponsButton = decodeFitWidth(resources, R.drawable.ui_weapons, weaponsW)
@@ -90,6 +98,33 @@ class MenuUiAssets(resources: Resources) {
         }
         val c = if (opened) Color.argb(255, (Color.red(base) + 40).coerceAtMost(255), (Color.green(base) + 35).coerceAtMost(255), (Color.blue(base) + 25).coerceAtMost(255)) else base
         return Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).apply { eraseColor(c) }
+    }
+
+    private fun placeholderWideButtonBitmap(targetW: Int, color: Int): Bitmap {
+        val h = (targetW * 0.22f).toInt().coerceIn(48, 120)
+        return Bitmap.createBitmap(targetW, h, Bitmap.Config.ARGB_8888).apply { eraseColor(color) }
+    }
+
+    private fun decodeAssetFitWidth(assetManager: AssetManager, path: String, targetW: Int): Bitmap {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        assetManager.open(path).use { BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0) throw IllegalArgumentException("bad bounds: $path")
+        var sample = 1
+        while (bounds.outWidth / sample > targetW * 1.25f) sample *= 2
+        val opts = BitmapFactory.Options().apply {
+            inJustDecodeBounds = false
+            inSampleSize = sample
+        }
+        var bmp = assetManager.open(path).use { stream ->
+            BitmapFactory.decodeStream(stream, null, opts)
+        } ?: throw IllegalArgumentException("decode failed: $path")
+        val nh = (bmp.height * (targetW.toFloat() / bmp.width.coerceAtLeast(1))).toInt().coerceAtLeast(1)
+        if (bmp.width != targetW) {
+            val scaled = Bitmap.createScaledBitmap(bmp, targetW, nh, true)
+            if (scaled != bmp) bmp.recycle()
+            bmp = scaled
+        }
+        return bmp
     }
 
     private fun decodeAssetSquare(assetManager: AssetManager, path: String, targetSize: Int): Bitmap {
