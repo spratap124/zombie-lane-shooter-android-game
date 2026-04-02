@@ -46,7 +46,11 @@ class MenuUiAssets(resources: Resources) {
         }
 
         val weaponsW = (wPx * 0.76f).toInt().coerceIn(280, 960)
-        weaponsButton = decodeFitWidth(resources, R.drawable.ui_weapons, weaponsW)
+        weaponsButton = try {
+            decodeAssetFitWidth(assets, "images/weapons_button_2.png", weaponsW)
+        } catch (_: Exception) {
+            decodeFitWidth(resources, R.drawable.ui_weapons, weaponsW)
+        }
 
         val settingsPx = (92f * density).toInt().coerceIn(72, 168)
         settingsIcon = decodeSquare(resources, R.drawable.ui_settings, settingsPx)

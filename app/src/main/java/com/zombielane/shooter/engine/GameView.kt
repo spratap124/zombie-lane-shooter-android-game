@@ -43,6 +43,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         /** Caps simultaneous grunts so collision + draw stay cheap at high stage / swarm. */
         private const val MAX_ACTIVE_NON_BOSS_ENEMIES = 46
         private const val MAX_PARTICLES = 220
+        private const val MENU_FREE_REWARD_COINS = 85
     }
 
     private var gameThread: GameThread? = null
@@ -103,6 +104,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     /** Ignores duplicate Skip taps while a rewarded ad is presenting or finishing. */
     private var chestSkipAdInFlight = false
+
+    /** Menu “free reward” rewarded ad; ignore double taps while presenting. */
+    private var menuFreeRewardAdInFlight = false
 
     /** Rewarded continue; reset in [resetGame]. */
     private var hasUsedContinue = false
@@ -902,12 +906,25 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 val nowMs = System.currentTimeMillis()
                 val toast = if (nowMs < chestToastUntilMs) chestToastText else null
                 val pop = streakPopup
+                dailyMissionManager.ensurePeriod(nowMs)
                 menuScreen.draw(
-                    canvas, safeArea, upgradeManager.highScore, upgradeManager.totalCoins, shooterManager,
-                    playerAssets, menuUiAssets, chestManager.getSlots(nowMs), streakManager.currentStreak(), toast,
+                    canvas,
+                    safeArea,
+                    upgradeManager.highScore,
+                    upgradeManager.totalCoins,
+                    shooterManager,
+                    playerAssets,
+                    menuUiAssets,
+                    chestManager.getSlots(nowMs),
+                    streakManager.currentStreak(),
+                    toast,
                     if (pop != null) pop.title else null,
                     if (pop != null) pop.message else null,
-                    nowMs
+                    upgradeManager,
+                    dailyMissionsClaimed = dailyMissionManager.claimedMissionCount(),
+                    freeRewardReady = adManager?.isRewardedReady() == true,
+                    freeRewardLoading = menuFreeRewardAdInFlight,
+                    nowMs = nowMs
                 )
                 if (nowMs < missionCompleteBannerUntilMs) drawMissionCompleteBanner(canvas)
             }
@@ -1091,6 +1108,17 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             return
         }
         when {
+            menuScreen.freeRewardAdRect.contains(tx, ty) -> {
+                if (menuFreeRewardAdInFlight) return
+                val am = adManager ?: return
+                am.preloadRewarded()
+                if (!am.isRewardedReady()) return
+                menuFreeRewardAdInFlight = true
+                am.showRewardedAd { earned, _ ->
+                    menuFreeRewardAdInFlight = false
+                    if (earned) upgradeManager.totalCoins += MENU_FREE_REWARD_COINS
+                }
+            }
             menuScreen.dailyMissionsBtnRect.contains(tx, ty) -> {
                 previousState = GameState.MENU
                 state = GameState.DAILY_MISSIONS
@@ -1105,7 +1133,10 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 adManager?.preloadRewarded()
                 state = GameState.CHESTS
             }
-            menuScreen.playBtnRect.contains(tx, ty) -> resetGame()
+            menuScreen.playBtnRect.contains(tx, ty) -> {
+                menuScreen.bumpPlayTapFeedback(now)
+                resetGame()
+            }
             menuScreen.shopBtnRect.contains(tx, ty) -> {
                 previousState = GameState.MENU
                 state = GameState.SHOP
@@ -1274,6 +1305,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         dailyMissionManager.ensurePeriod(now)
         dailyMissionManager.syncCompletions(upgradeManager, chestManager, now)
         streakManager.onMenuEnter(chestManager)?.let { streakPopup = it }
+        adManager?.preloadRewarded()
     }
 
     private fun drawMissionCompleteBanner(canvas: Canvas) {

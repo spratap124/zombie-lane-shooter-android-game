@@ -13,10 +13,13 @@ import android.graphics.Typeface
 import com.zombielane.shooter.data.ChestManager
 import com.zombielane.shooter.data.ChestSlot
 import com.zombielane.shooter.data.ChestType
+import com.zombielane.shooter.data.DailyMissionManager
 import com.zombielane.shooter.data.ShooterManager
+import com.zombielane.shooter.data.UpgradeManager
 import com.zombielane.shooter.objects.PlayerAssets
 import kotlin.math.cos
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -25,6 +28,10 @@ import kotlin.random.Random
  * ship, glowing UI, chest chips with timers.
  */
 class MenuScreen {
+
+    companion object {
+        private const val PLAY_TAP_FEEDBACK_MS = 220L
+    }
 
     private val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
@@ -210,17 +217,56 @@ class MenuScreen {
 
     private val bgTopPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
 
+    /** Extra readability over busy menu background art (top / mid / bottom alpha). */
+    private val readabilityOverlayPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+
+    private val chestDimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val chestShimmerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val chestHintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        textAlign = Paint.Align.CENTER
+    }
+    private val chestFeaturedBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+    }
+
+    private val playGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val statBarBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#33252A3A")
+        style = Paint.Style.FILL
+    }
+    private val statBarFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+
+    private val freeRewardFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val freeRewardStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 2f
+    }
+    private val freeRewardTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
+        textAlign = Paint.Align.CENTER
+    }
+
+    private val sparklePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+
+    private val coinHaloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+
     private val gearPath = Path()
     private val weaponPath = Path()
     private val tmpRect = RectF()
     private val tmpRect2 = RectF()
+    private val tmpRect3 = RectF()
+    private val chestClipPath = Path()
 
     var playBtnRect = RectF()
     var shopBtnRect = RectF()
     var settingsBtnRect = RectF()
     var chestsNavRect = RectF()
     var dailyMissionsBtnRect = RectF()
+    var freeRewardAdRect = RectF()
     var streakOkRect = RectF()
+
+    private var playTapStartMs = 0L
 
     private var frameCount = 0L
     private var bgW = 0f
@@ -312,6 +358,20 @@ class MenuScreen {
             floatArrayOf(0f, 0.45f, 1f),
             Shader.TileMode.CLAMP
         )
+        readabilityOverlayPaint.shader = LinearGradient(
+            0f, 0f, 0f, h,
+            intArrayOf(
+                Color.argb((255 * 0.4f).toInt(), 0, 0, 0),
+                Color.argb((255 * 0.3f).toInt(), 0, 0, 0),
+                Color.argb((255 * 0.6f).toInt(), 0, 0, 0)
+            ),
+            floatArrayOf(0f, 0.5f, 1f),
+            Shader.TileMode.CLAMP
+        )
+    }
+
+    fun bumpPlayTapFeedback(atMs: Long) {
+        playTapStartMs = atMs
     }
 
     fun draw(
@@ -327,6 +387,10 @@ class MenuScreen {
         chestToast: String?,
         streakPopupTitle: String?,
         streakPopupMessage: String?,
+        upgradeManager: UpgradeManager,
+        dailyMissionsClaimed: Int,
+        freeRewardReady: Boolean,
+        freeRewardLoading: Boolean,
         nowMs: Long
     ) {
         frameCount++
@@ -338,9 +402,10 @@ class MenuScreen {
         ensureBackground(w, h)
 
         drawMenuBackgroundCover(canvas, menuUi.menuBackground, w, h, bitmapPaint)
-
+        drawParallaxStars(canvas, w, h)
         canvas.drawRect(0f, 0f, w, h, menuScrimPaint)
         canvas.drawRect(0f, 0f, w, h, vignettePaint)
+        canvas.drawRect(0f, 0f, w, h, readabilityOverlayPaint)
 
         titlePaint.color = Color.WHITE
         subtitlePaint.color = Color.parseColor("#4DD0E1")
@@ -365,7 +430,8 @@ class MenuScreen {
         // Title + glow pulse + scale
         var yPos = safeArea.top + safeArea.height() * 0.055f
         val titleScale = 1f + sin(tAnim * 1.1f).toFloat() * 0.04f
-        val glowR = (18f + sin(frameCount * 0.07).toFloat() * 5f) * s
+        val uiFlicker = 1f + 0.04f * sin(frameCount * 0.11f).toFloat()
+        val glowR = (18f + sin(frameCount * 0.07).toFloat() * 5f) * s * uiFlicker
         titlePaint.textSize = 68f * s * titleScale
         titlePaint.setShadowLayer(glowR, 0f, 0f, Color.parseColor("#00BCD4"))
         canvas.drawText("ZOMBIE LANE", cx, yPos, titlePaint)
@@ -376,22 +442,29 @@ class MenuScreen {
         subtitlePaint.clearShadowLayer()
         titlePaint.clearShadowLayer()
 
-        yPos += 36f * s
+        yPos += 31f * s
         infoPaint.textSize = 26f * s
         infoPaint.setShadowLayer(5f * s, 0f, 1.5f * s, Color.BLACK)
         canvas.drawText("ARCADE · ENDLESS SECTORS", cx, yPos, infoPaint)
         infoPaint.clearShadowLayer()
 
-        // Ship center
-        yPos += 36f * s
+        // Ship center (loadout): extra float, tilt, layered glow
+        yPos += 31f * s
         val shipTarget = (safeArea.width() * 0.22f).coerceIn(140f * s, 220f * s)
         val bmp = playerAssets.get(shooterManager.equipped)
         val bob = sin(frameCount * 0.055).toFloat() * 10f * s
+        val loadoutFloat = sin(frameCount * 0.048f).toFloat() * 5f * s
         val sway = sin(frameCount * 0.038).toFloat() * 6f * s
         val shipCx = cx + sway
-        val shipCy = yPos + shipTarget / 2f + bob
+        val shipCy = yPos + shipTarget / 2f + bob + loadoutFloat
+        val shipTiltDeg = sin(frameCount * 0.05f).toFloat() * 2.8f
         val scale = shipTarget / bmp.width.toFloat()
 
+        shipGlowPaint.color = Color.argb(
+            (26 + (sin(frameCount * 0.06) * 14).toInt()).coerceIn(16, 48),
+            0, 229, 255
+        )
+        canvas.drawCircle(shipCx, shipCy, shipTarget * 0.72f, shipGlowPaint)
         shipGlowPaint.color = Color.argb(
             (60 + (sin(frameCount * 0.09) * 40).toInt()).coerceIn(40, 110),
             0, 229, 255
@@ -402,6 +475,7 @@ class MenuScreen {
 
         canvas.save()
         canvas.translate(shipCx, shipCy)
+        canvas.rotate(shipTiltDeg)
         canvas.scale(scale, scale)
         canvas.drawBitmap(bmp, -bmp.width / 2f, -bmp.height / 2f, null)
         canvas.restore()
@@ -421,35 +495,29 @@ class MenuScreen {
         val rowLeft = safeArea.left + padH
         val rightmostChestRight = rowLeft + 4f * chipW + 3f * chipGap
 
+        val labelTs = 22f * s
+        val scoreTs = 32f * s
+        val lineGap = 8f * s
+        var wBestCol = 0f
+        var labelBaseline = shipCy
+        var scoreBaseline = shipCy
+        val scoreStr = if (highScore > 0) highScore.toString() else ""
         if (highScore > 0) {
             highScorePaint.textAlign = Paint.Align.LEFT
-            val labelTs = 22f * s
-            val scoreTs = 32f * s
-            val lineGap = 8f * s
             highScorePaint.textSize = scoreTs
             highScorePaint.color = Color.parseColor("#FFE082")
-            val scoreStr = highScore.toString()
             val fmScore = highScorePaint.fontMetrics
             val wScore = highScorePaint.measureText(scoreStr)
             highScorePaint.textSize = labelTs
             highScorePaint.color = Color.parseColor("#B0BEC5")
             val fmLabel = highScorePaint.fontMetrics
             val wLabel = highScorePaint.measureText("BEST")
-            val wBestCol = max(wLabel, wScore)
+            wBestCol = max(wLabel, wScore)
             val blockH = (fmLabel.descent - fmLabel.ascent) + lineGap + (fmScore.descent - fmScore.ascent)
-            val labelBaseline = shipCy - blockH / 2f - fmLabel.ascent
-            var bestLeftX = edgePad
-            if (bestLeftX + wBestCol > shipInnerLeft) {
-                bestLeftX = (shipInnerLeft - wBestCol).coerceAtLeast(edgePad)
-            }
-            highScorePaint.setShadowLayer(6f * s, 0f, 2f * s, Color.BLACK)
-            canvas.drawText("BEST", bestLeftX, labelBaseline, highScorePaint)
+            labelBaseline = shipCy - blockH / 2f - fmLabel.ascent
             highScorePaint.textSize = scoreTs
-            highScorePaint.color = Color.parseColor("#FFE082")
-            val scoreBaseline = labelBaseline + fmLabel.descent + lineGap - highScorePaint.fontMetrics.ascent
-            canvas.drawText(scoreStr, bestLeftX, scoreBaseline, highScorePaint)
-            highScorePaint.clearShadowLayer()
-            highScorePaint.textSize = 34f * s
+            val fmScoreLine = highScorePaint.fontMetrics
+            scoreBaseline = labelBaseline + fmLabel.descent + lineGap - fmScoreLine.ascent
         }
 
         coinPaint.textSize = 36f * s
@@ -462,8 +530,25 @@ class MenuScreen {
         val coinColW = max(coinDraw, coinTextW)
         val stackGap = 8f * s
         val coinStackH = coinDraw + stackGap + (fmCoin.descent - fmCoin.ascent)
-        val coinNudgeLeft = 64f * s
+        val coinNudgeLeft = 74f * s
         val coinAnchorX = rightmostChestRight - coinNudgeLeft
+
+        if (highScore > 0) {
+            var bestLeftX = edgePad
+            if (bestLeftX + wBestCol > shipInnerLeft) {
+                bestLeftX = (shipInnerLeft - wBestCol).coerceAtLeast(edgePad)
+            }
+            highScorePaint.textSize = labelTs
+            highScorePaint.color = Color.parseColor("#B0BEC5")
+            highScorePaint.setShadowLayer(6f * s * uiFlicker, 0f, 2f * s, Color.BLACK)
+            canvas.drawText("BEST", bestLeftX, labelBaseline, highScorePaint)
+            highScorePaint.textSize = scoreTs
+            highScorePaint.color = Color.parseColor("#FFE082")
+            canvas.drawText(scoreStr, bestLeftX, scoreBaseline, highScorePaint)
+            highScorePaint.clearShadowLayer()
+            highScorePaint.textSize = 34f * s
+        }
+
         var coinLeftX = coinAnchorX
         if (coinLeftX + coinColW > edgeRight) {
             coinLeftX = edgeRight - coinColW
@@ -471,41 +556,61 @@ class MenuScreen {
         coinLeftX = max(coinLeftX, coinAnchorX)
         val stackTop = shipCy + coinBob - coinStackH / 2f
         val iconLeft = coinLeftX + (coinColW - coinDraw) / 2f
+        val coinHaloPulse = (42 + 38 * sin(frameCount * 0.088f)).toInt().coerceIn(30, 120)
+        coinHaloPaint.shader = RadialGradient(
+            iconLeft + coinDraw / 2f,
+            stackTop + coinDraw / 2f,
+            coinDraw * 0.55f,
+            Color.argb(coinHaloPulse, 255, 210, 80),
+            Color.TRANSPARENT,
+            Shader.TileMode.CLAMP
+        )
+        canvas.drawCircle(iconLeft + coinDraw / 2f, stackTop + coinDraw / 2f, coinDraw * 0.5f, coinHaloPaint)
+        coinHaloPaint.shader = null
         tmpRect.set(iconLeft, stackTop, iconLeft + coinDraw, stackTop + coinDraw)
         drawBitmapFit(canvas, coinBmp, tmpRect)
         coinPaint.textAlign = Paint.Align.CENTER
-        coinPaint.setShadowLayer(8f * s, 0f, 2f * s, Color.BLACK)
+        coinPaint.setShadowLayer(10f * s * uiFlicker, 0f, 2f * s, Color.parseColor("#80501000"))
         val coinNumBaseline = stackTop + coinDraw + stackGap - fmCoin.ascent
         canvas.drawText(coinStr, coinLeftX + coinColW / 2f, coinNumBaseline, coinPaint)
         coinPaint.clearShadowLayer()
         coinPaint.textAlign = Paint.Align.LEFT
 
-        yPos += shipTarget + 30f * s
+        yPos += shipTarget + 26f * s
         equippedLabelPaint.textSize = 26f * s
         equippedLabelPaint.setShadowLayer(5f * s, 0f, 1.5f * s, Color.BLACK)
         canvas.drawText("LOADOUT", cx, yPos, equippedLabelPaint)
         equippedLabelPaint.clearShadowLayer()
-        yPos += 38f * s
+        yPos += 32f * s
         val equipped = shooterManager.getEquipped()
         equippedNamePaint.textSize = 36f * s
         equippedNamePaint.color = equipped.bulletColor
         equippedNamePaint.setShadowLayer(6f, 0f, 0f, equipped.bulletColor and 0x88FFFFFF.toInt())
         canvas.drawText(equipped.name, cx, yPos, equippedNamePaint)
         equippedNamePaint.clearShadowLayer()
+        drawLoadoutStatBars(canvas, cx, yPos + 14f * s, rowInnerW, s, upgradeManager)
 
-        // Chest strip (icons + type name + status)
-        yPos += 36f * s
+        // Free reward (rewarded ad) + chest strip
+        yPos += 50f * s
+        drawFreeRewardPill(canvas, safeArea, padH, edgeRight, yPos, s, freeRewardReady, freeRewardLoading)
+        yPos += 40f * s
+
         val chipH = (safeArea.width() * 0.245f).coerceIn(132f * s, 200f * s)
-        val streakBelowChip = 38f * s
+        val streakBelowChip = 32f * s
+        val featuredChestIdx = featuredChestIndex(chestSlots, nowMs)
         for (i in 0 until ChestManager.MAX_SLOTS) {
             val left = rowLeft + i * (chipW + chipGap)
             tmpRect.set(left, yPos, left + chipW, yPos + chipH)
             val slot = chestSlots.getOrNull(i)
-            drawChestChip(canvas, tmpRect, slot, nowMs, s, i, menuUi)
+            drawChestChip(
+                canvas, tmpRect, slot, nowMs, s, i, menuUi,
+                isFeatured = i == featuredChestIdx
+            )
         }
+        drawChestRowSparkles(canvas, rowLeft, yPos, chipW, chipGap, chipH, s)
         val streakBaseline = yPos + chipH + streakBelowChip
         menuSubPaint.textSize = 26f * s
-        menuSubPaint.setShadowLayer(5f * s, 0f, 1.5f * s, Color.BLACK)
+        menuSubPaint.setShadowLayer(5f * s * uiFlicker, 0f, 1.5f * s, Color.BLACK)
         canvas.drawText("Streak $streakDays  ·  tap chests", cx, streakBaseline, menuSubPaint)
         menuSubPaint.clearShadowLayer()
 
@@ -513,49 +618,76 @@ class MenuScreen {
             rowLeft,
             yPos,
             rowLeft + 4 * chipW + 3 * chipGap,
-            streakBaseline + 22f * s
+            streakBaseline + 19f * s
         )
 
-        yPos += chipH + streakBelowChip + 52f * s
+        yPos += chipH + streakBelowChip + 44f * s
         if (chestToast != null) {
             toastPaint.textSize = 20f * s
             canvas.drawText(chestToast, cx, yPos, toastPaint)
             yPos += 36f * s
         }
 
-        val dailyW = safeArea.width() * 0.86f
-        val dailyBmp = menuUi.dailyMissionsButton
-        val dailyAr = dailyBmp.height.toFloat() / dailyBmp.width.coerceAtLeast(1)
-        var dailyH = dailyW * dailyAr
-        dailyH = dailyH.coerceIn(safeArea.height() * 0.095f, safeArea.height() * 0.24f)
-        val dailyPulse = 1f + sin(frameCount * 0.055).toFloat() * 0.025f
-        val dw = dailyW * dailyPulse
-        val dh = dailyH * dailyPulse
-        tmpRect.set(cx - dw / 2f, yPos + (dailyH - dh) / 2f, cx + dw / 2f, yPos + (dailyH + dh) / 2f)
-        drawBitmapFit(canvas, dailyBmp, tmpRect)
-        dailyMissionsBtnRect.set(cx - dailyW / 2f, yPos, cx + dailyW / 2f, yPos + dailyH)
-
-        yPos += dailyH + 20f * s
         val playW = safeArea.width() * 0.88f
         val bmpAr = menuUi.playButton.height.toFloat() / menuUi.playButton.width.coerceAtLeast(1)
         var playH = playW * bmpAr
-        // Fill vertical space: wide art must not be squashed to a tiny strip (old cap caused micro-button).
         playH = playH.coerceIn(safeArea.height() * 0.075f, safeArea.height() * 0.26f)
-        val pulse = 1f + sin(frameCount * 0.065).toFloat() * 0.04f
-        val pw = playW * pulse
-        val ph = playH * pulse
+        val playBreath = 1f + sin(frameCount * 0.04f).toFloat() * 0.06f
+        val tapElapsed = (nowMs - playTapStartMs).toFloat().coerceAtLeast(0f)
+        val tapMul = if (tapElapsed < PLAY_TAP_FEEDBACK_MS) {
+            val u = 1f - tapElapsed / PLAY_TAP_FEEDBACK_MS.toFloat()
+            1f - 0.12f * u * u
+        } else 1f
+        val playPulse = playBreath * tapMul
+        val tapGlowBoost = if (tapElapsed < PLAY_TAP_FEEDBACK_MS) {
+            (1f - tapElapsed / PLAY_TAP_FEEDBACK_MS.toFloat()).coerceIn(0f, 1f)
+        } else 0f
+        val glowAlpha = (38 + 22 * sin(frameCount * 0.042f).toFloat() + tapGlowBoost * 55f).toInt().coerceIn(0, 160)
+        tmpRect3.set(cx - playW / 2f, yPos, cx + playW / 2f, yPos + playH)
+        tmpRect3.inset(-10f * s, -6f * s)
+        playGlowPaint.shader = RadialGradient(
+            cx, yPos + playH / 2f, playW * 0.55f,
+            Color.argb(glowAlpha, 0, 230, 255),
+            Color.TRANSPARENT,
+            Shader.TileMode.CLAMP
+        )
+        canvas.drawRoundRect(tmpRect3, 20f * s, 20f * s, playGlowPaint)
+        playGlowPaint.shader = null
+        val pw = playW * playPulse
+        val ph = playH * playPulse
         tmpRect.set(cx - pw / 2f, yPos + (playH - ph) / 2f, cx + pw / 2f, yPos + (playH + ph) / 2f)
         drawBitmapFit(canvas, menuUi.playButton, tmpRect)
-        // Hit target matches visible art only (container was huge; empty margin was starting the game).
         playBtnRect.set(tmpRect)
 
-        yPos += playH + 28f * s
-        val weaponW = (safeArea.width() * 0.78f).coerceAtMost(playW * 1.08f)
-        val weaponH = menuUi.weaponsButton.height * (weaponW / menuUi.weaponsButton.width.coerceAtLeast(1))
-        shopBtnRect.set(cx - weaponW / 2f, yPos, cx + weaponW / 2f, yPos + weaponH)
-        drawBitmapFit(canvas, menuUi.weaponsButton, shopBtnRect)
+        yPos += playH + 20f * s
 
-        yPos += weaponH + 28f * s
+        val dailyBmp = menuUi.dailyMissionsButton
+        val weaponBmp = menuUi.weaponsButton
+        val pairGap = 12f * s
+        val pairInnerW = safeArea.width() - 2f * padH
+        val halfW = (pairInnerW - pairGap) / 2f
+        val dailyAr = dailyBmp.height.toFloat() / dailyBmp.width.coerceAtLeast(1)
+        val weaponAr = weaponBmp.height.toFloat() / weaponBmp.width.coerceAtLeast(1)
+        val rowHUnscaled = max(halfW * dailyAr, halfW * weaponAr)
+        val rowH = rowHUnscaled.coerceIn(safeArea.height() * 0.072f, safeArea.height() * 0.16f)
+        val pairRowLeft = safeArea.left + padH
+        dailyMissionsBtnRect.set(pairRowLeft, yPos, pairRowLeft + halfW, yPos + rowH)
+        shopBtnRect.set(pairRowLeft + halfW + pairGap, yPos, pairRowLeft + pairInnerW, yPos + rowH)
+        tmpRect.set(dailyMissionsBtnRect)
+        drawBitmapFit(canvas, dailyBmp, tmpRect)
+        tmpRect.set(shopBtnRect)
+        bitmapPaint.alpha = (255 * 0.85f).toInt()
+        drawBitmapFit(canvas, weaponBmp, tmpRect)
+        bitmapPaint.alpha = 255
+        drawDailyMissionProgressDots(
+            canvas,
+            dailyMissionsBtnRect.centerX(),
+            yPos + rowH + 6f * s,
+            s,
+            dailyMissionsClaimed
+        )
+
+        yPos += rowH + 22f * s
 
         infoPaint.textSize = 24f * s
         infoPaint.textAlign = Paint.Align.LEFT
@@ -769,6 +901,149 @@ class MenuScreen {
         canvas.restore()
     }
 
+    private fun featuredChestIndex(slots: List<ChestSlot?>, now: Long): Int {
+        var bestReady = -1
+        for (i in 0 until ChestManager.MAX_SLOTS) {
+            val slot = slots.getOrNull(i) ?: continue
+            if (slot.isReady(now) && (bestReady < 0 || i < bestReady)) bestReady = i
+        }
+        if (bestReady >= 0) return bestReady
+        var soonIdx = -1
+        var bestRem = Long.MAX_VALUE
+        for (i in 0 until ChestManager.MAX_SLOTS) {
+            val slot = slots.getOrNull(i) ?: continue
+            if (!slot.isReady(now)) {
+                val rem = slot.remainingMs(now)
+                if (rem < bestRem) {
+                    bestRem = rem
+                    soonIdx = i
+                }
+            }
+        }
+        if (soonIdx >= 0) return soonIdx
+        return (0 until ChestManager.MAX_SLOTS).firstOrNull { slots.getOrNull(it) == null } ?: 0
+    }
+
+    private fun drawLoadoutStatBars(
+        canvas: Canvas,
+        cx: Float,
+        topY: Float,
+        rowInnerW: Float,
+        s: Float,
+        upgradeManager: UpgradeManager
+    ) {
+        val barTotalW = min(rowInnerW * 0.58f, 280f * s)
+        val barH = 5.5f * s
+        val gapY = 8f * s
+        val left = cx - barTotalW / 2f
+        val dmgN = min(1f, upgradeManager.damage / 22f)
+        val rofN = min(1f, upgradeManager.fireRateReductionMs / 80f)
+        val hpN = min(1f, (upgradeManager.maxHealth - 3) / 18f)
+        val rows = listOf(
+            Pair(Color.parseColor("#EF5350"), dmgN),
+            Pair(Color.parseColor("#FFCA28"), rofN),
+            Pair(Color.parseColor("#66BB6A"), hpN)
+        )
+        var y = topY
+        for ((col, fill) in rows) {
+            tmpRect2.set(left, y, left + barTotalW, y + barH)
+            canvas.drawRoundRect(tmpRect2, barH / 2f, barH / 2f, statBarBgPaint)
+            tmpRect2.right = left + barTotalW * fill
+            statBarFillPaint.color = col
+            canvas.drawRoundRect(tmpRect2, barH / 2f, barH / 2f, statBarFillPaint)
+            y += barH + gapY
+        }
+    }
+
+    private fun drawFreeRewardPill(
+        canvas: Canvas,
+        safeArea: RectF,
+        padH: Float,
+        edgeRight: Float,
+        top: Float,
+        s: Float,
+        ready: Boolean,
+        loading: Boolean
+    ) {
+        val pillH = 36f * s
+        freeRewardTextPaint.textSize = (19f * s).coerceIn(15f, 22f)
+        val label = when {
+            loading -> "LOADING…"
+            ready -> "FREE REWARD"
+            else -> "TAP WHEN READY"
+        }
+        val text = "🎁 $label"
+        val tw = freeRewardTextPaint.measureText(text) + 26f * s
+        val pillLeft = (edgeRight - tw).coerceAtLeast(safeArea.left + padH)
+        freeRewardAdRect.set(pillLeft, top, edgeRight, top + pillH)
+        val r = 18f * s
+        freeRewardFillPaint.shader = LinearGradient(
+            freeRewardAdRect.left, freeRewardAdRect.top,
+            freeRewardAdRect.right, freeRewardAdRect.bottom,
+            intArrayOf(Color.parseColor("#3D2E5C"), Color.parseColor("#1E1A2E")),
+            floatArrayOf(0f, 1f),
+            Shader.TileMode.CLAMP
+        )
+        canvas.drawRoundRect(freeRewardAdRect, r, r, freeRewardFillPaint)
+        freeRewardFillPaint.shader = null
+        val pulse = (0.5f + 0.5f * sin(frameCount * 0.09f))
+        freeRewardStrokePaint.color = when {
+            loading -> Color.parseColor("#5C5C7A")
+            ready -> Color.argb((140 + pulse * 115).toInt(), 255, 215, 80)
+            else -> Color.parseColor("#6D6D8A")
+        }
+        freeRewardStrokePaint.strokeWidth = (2f + pulse * 0.8f) * s
+        canvas.drawRoundRect(freeRewardAdRect, r, r, freeRewardStrokePaint)
+        freeRewardTextPaint.color = if (ready && !loading) Color.parseColor("#FFECB3") else Color.parseColor("#B0BEC5")
+        freeRewardTextPaint.setShadowLayer(3f * s, 0f, 1f * s, Color.parseColor("#80000000"))
+        canvas.drawText(text, freeRewardAdRect.centerX(), freeRewardAdRect.centerY() + 7f * s, freeRewardTextPaint)
+        freeRewardTextPaint.clearShadowLayer()
+    }
+
+    private fun drawChestRowSparkles(
+        canvas: Canvas,
+        rowLeft: Float,
+        rowTop: Float,
+        chipW: Float,
+        chipGap: Float,
+        chipH: Float,
+        s: Float
+    ) {
+        val seeds = floatArrayOf(0.12f, 0.37f, 0.62f, 0.88f)
+        for (i in seeds.indices) {
+            val phase = frameCount * 0.07f + i * 1.7f
+            val a = (35 + 55 * (0.5f + 0.5f * sin(phase))).toInt().coerceIn(0, 120)
+            if (a < 12) continue
+            val slotCenter = rowLeft + chipW / 2f + i * (chipW + chipGap)
+            val sx = slotCenter + sin(phase * 1.1f) * 6f * s
+            val sy = rowTop + chipH * 0.18f + sin(phase * 0.9f) * 5f * s
+            sparklePaint.color = Color.argb(a, 255, 245, 200)
+            canvas.drawCircle(sx, sy, (1.8f + sin(phase) * 0.6f) * s, sparklePaint)
+        }
+    }
+
+    private fun drawDailyMissionProgressDots(
+        canvas: Canvas,
+        cx: Float,
+        baselineY: Float,
+        s: Float,
+        claimed: Int
+    ) {
+        val dotR = 5f * s
+        val gap = 14f * s
+        val total = DailyMissionManager.MISSION_COUNT
+        for (i in 0 until total) {
+            val x = cx - (total - 1) * gap / 2f + i * gap
+            statBarBgPaint.color = Color.parseColor("#33252A3A")
+            canvas.drawCircle(x, baselineY, dotR, statBarBgPaint)
+            if (i < claimed) {
+                statBarFillPaint.color = Color.parseColor("#4DD0E1")
+                canvas.drawCircle(x, baselineY, dotR * 0.65f, statBarFillPaint)
+            }
+        }
+        statBarBgPaint.color = Color.parseColor("#33252A3A")
+    }
+
     private fun drawChestChip(
         canvas: Canvas,
         r: RectF,
@@ -776,48 +1051,110 @@ class MenuScreen {
         nowMs: Long,
         s: Float,
         index: Int,
-        menuUi: MenuUiAssets
+        menuUi: MenuUiAssets,
+        isFeatured: Boolean
     ) {
-        val pulse = sin(frameCount * 0.1f + index * 0.7f).toFloat() * 0.5f + 0.5f
+        val chipPulse = 0.5f + 0.5f * sin(frameCount * 0.12f)
+        val scaleFeatured = if (isFeatured) 1f + 0.05f * chipPulse else 1f
+
+        canvas.save()
+        canvas.translate(r.centerX(), r.centerY())
+        canvas.scale(scaleFeatured, scaleFeatured)
+        canvas.translate(-r.centerX(), -r.centerY())
+
         chestBodyPaint.color = Color.parseColor("#12121C")
-        chestStrokePaint.color = Color.parseColor("#3D3D5C")
         chestStrokePaint.strokeWidth = 2f * s
 
-        val textBand = 44f * s
+        val textBand = if (isFeatured && slot != null) 52f * s else 44f * s
         val inner = 4f * s
         val iconTop = r.top + inner
         val iconBottom = r.bottom - textBand
         val iconH = (iconBottom - iconTop).coerceAtLeast(28f)
 
         if (slot == null) {
+            chestStrokePaint.color = if (isFeatured) Color.parseColor("#5C6BC0") else Color.parseColor("#3D3D5C")
             canvas.drawRoundRect(r, 12f * s, 12f * s, chestBodyPaint)
             canvas.drawRoundRect(r, 12f * s, 12f * s, chestStrokePaint)
             tmpRect2.set(r.left + inner, iconTop, r.right - inner, iconTop + iconH)
-            bitmapPaint.alpha = 85
+            bitmapPaint.alpha = if (isFeatured) 110 else 85
             drawBitmapFit(canvas, menuUi.chest(ChestType.COMMON), tmpRect2)
             bitmapPaint.alpha = 255
             chestNamePaint.textSize = (12f * s).coerceIn(10f, 16f)
             chestNamePaint.color = Color.parseColor("#616161")
-            canvas.drawText("EMPTY", r.centerX(), r.bottom - 28f * s, chestNamePaint)
-            chestTimerPaint.textSize = (r.height() * 0.13f).coerceIn(18f * s, 26f * s)
+            canvas.drawText("EMPTY", r.centerX(), r.bottom - (if (isFeatured) 34f else 28f) * s, chestNamePaint)
+            chestTimerPaint.textSize = (r.height() * 0.12f).coerceIn(16f * s, 24f * s)
             chestTimerPaint.color = Color.parseColor("#616161")
-            canvas.drawText("—", r.centerX(), r.bottom - 9f * s, chestTimerPaint)
+            canvas.drawText("—", r.centerX(), r.bottom - (if (isFeatured) 20f else 9f) * s, chestTimerPaint)
+            if (isFeatured) {
+                chestHintPaint.textSize = 9f * s
+                chestHintPaint.color = Color.argb(200, 158, 158, 180)
+                canvas.drawText("Play to earn", r.centerX(), r.bottom - 6f * s, chestHintPaint)
+            }
+            if (!isFeatured) {
+                chestDimPaint.color = Color.argb(55, 0, 0, 0)
+                canvas.drawRoundRect(r, 12f * s, 12f * s, chestDimPaint)
+            }
+            canvas.restore()
             return
         }
 
         val ready = slot.isReady(nowMs)
-        if (ready) {
-            chestReadyGlowPaint.color = Color.argb((110 + pulse * 145).toInt(), 255, 230, 90)
-            chestReadyGlowPaint.strokeWidth = (3.5f + pulse * 2f) * s
+        val rarityBorder = when (slot.type) {
+            ChestType.COMMON -> Color.parseColor("#B0A070")
+            ChestType.RARE -> Color.parseColor("#64B5F6")
+            ChestType.EPIC -> Color.parseColor("#CE93D8")
+            ChestType.SUPER -> Color.parseColor("#FFD54F")
+        }
+
+        if (isFeatured) {
+            val borderCol = when (slot.type) {
+                ChestType.EPIC -> Color.argb((145 + chipPulse * 110).toInt(), 186, 104, 200)
+                ChestType.SUPER, ChestType.COMMON -> Color.argb((150 + chipPulse * 105).toInt(), 255, 210, 100)
+                ChestType.RARE -> Color.argb((140 + chipPulse * 100).toInt(), 100, 200, 255)
+            }
+            chestFeaturedBorderPaint.color = borderCol
+            chestFeaturedBorderPaint.strokeWidth = (3.2f + chipPulse * 1.8f) * s
+            tmpRect2.set(r)
+            tmpRect2.inset(-7f * s, -7f * s)
+            canvas.drawRoundRect(tmpRect2, 17f * s, 17f * s, chestFeaturedBorderPaint)
+        }
+
+        if (ready && isFeatured) {
+            chestReadyGlowPaint.color = Color.argb((95 + chipPulse * 160).toInt(), 255, 224, 100)
+            chestReadyGlowPaint.strokeWidth = (4f + chipPulse * 2.5f) * s
             tmpRect2.set(r)
             tmpRect2.inset(-5f * s, -5f * s)
             canvas.drawRoundRect(tmpRect2, 16f * s, 16f * s, chestReadyGlowPaint)
+        } else if (ready && !isFeatured) {
+            chestReadyGlowPaint.color = Color.argb(70, 180, 170, 120)
+            chestReadyGlowPaint.strokeWidth = 2f * s
+            tmpRect2.set(r)
+            tmpRect2.inset(-3f * s, -3f * s)
+            canvas.drawRoundRect(tmpRect2, 14f * s, 14f * s, chestReadyGlowPaint)
         }
+
         canvas.drawRoundRect(r, 12f * s, 12f * s, chestBodyPaint)
+        chestStrokePaint.color = if (isFeatured) rarityBorder else Color.parseColor("#3D3D5C")
         canvas.drawRoundRect(r, 12f * s, 12f * s, chestStrokePaint)
 
         tmpRect2.set(r.left + inner, iconTop, r.right - inner, iconTop + iconH)
         drawBitmapFit(canvas, menuUi.chest(slot.type), tmpRect2)
+
+        chestClipPath.reset()
+        chestClipPath.addRoundRect(r, 12f * s, 12f * s, Path.Direction.CW)
+        canvas.save()
+        canvas.clipPath(chestClipPath)
+        val shimmerT = (frameCount * 0.045f + index * 0.4f) % 2f
+        val sx0 = r.left + r.width() * (shimmerT * 0.5f - 0.15f)
+        chestShimmerPaint.shader = LinearGradient(
+            sx0, r.top, sx0 + r.width() * 0.55f, r.bottom,
+            intArrayOf(0x00000000, 0x33FFFFFF, 0x00000000),
+            floatArrayOf(0f, 0.5f, 1f),
+            Shader.TileMode.CLAMP
+        )
+        canvas.drawRect(r, chestShimmerPaint)
+        chestShimmerPaint.shader = null
+        canvas.restore()
 
         chestNamePaint.textSize = (12f * s).coerceIn(10f, 16f)
         chestNamePaint.color = when (slot.type) {
@@ -826,12 +1163,31 @@ class MenuScreen {
             ChestType.EPIC -> Color.parseColor("#CE93D8")
             ChestType.SUPER -> Color.parseColor("#FFD54F")
         }
-        canvas.drawText(slot.type.displayName.uppercase(), r.centerX(), r.bottom - 28f * s, chestNamePaint)
+        val nameY = r.bottom - (if (isFeatured) 34f else 28f) * s
+        canvas.drawText(slot.type.displayName.uppercase(), r.centerX(), nameY, chestNamePaint)
 
-        chestTimerPaint.textSize = (r.height() * 0.13f).coerceIn(18f * s, 26f * s)
+        chestTimerPaint.textSize = (r.height() * 0.12f).coerceIn(16f * s, 24f * s)
         chestTimerPaint.color = if (ready) Color.parseColor("#FFF59D") else Color.parseColor("#B0BEC5")
-        val label = if (ready) "OPEN" else formatRemaining(slot.remainingMs(nowMs))
-        canvas.drawText(label, r.centerX(), r.bottom - 9f * s, chestTimerPaint)
+        val statusLabel = when {
+            ready && isFeatured -> "READY"
+            ready -> "OPEN"
+            else -> formatRemaining(slot.remainingMs(nowMs))
+        }
+        val timerY = r.bottom - (if (isFeatured) 20f else 9f) * s
+        canvas.drawText(statusLabel, r.centerX(), timerY, chestTimerPaint)
+
+        if (isFeatured && ready) {
+            chestHintPaint.textSize = 9f * s
+            chestHintPaint.color = Color.argb(220, 200, 200, 220)
+            canvas.drawText("Tap to open", r.centerX(), r.bottom - 5f * s, chestHintPaint)
+        }
+
+        if (!isFeatured) {
+            chestDimPaint.color = Color.argb(72, 0, 0, 0)
+            canvas.drawRoundRect(r, 12f * s, 12f * s, chestDimPaint)
+        }
+
+        canvas.restore()
     }
 
     private fun drawBitmapFit(canvas: Canvas, bmp: Bitmap, dst: RectF) {
