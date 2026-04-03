@@ -45,8 +45,8 @@ android {
         applicationId = "com.zombielane.shooter"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 5
+        versionName = "1.0.4"
 
         // Debug / local: admob.*.id.test in local.properties (see release for production).
         manifestPlaceholders["admobApplicationId"] = admobTestApplicationId
@@ -148,11 +148,14 @@ afterEvaluate {
     val bundleRelease = tasks.findByName("bundleRelease") ?: return@afterEvaluate
     bundleRelease.doLast {
         val dir = layout.buildDirectory.dir("outputs/bundle/release").get().asFile
-        val aabs = dir.listFiles { _, name -> name.endsWith(".aab") } ?: emptyArray()
-        check(aabs.size == 1) {
-            "expected exactly one .aab in $dir, found: ${aabs.map { it.name }}"
+        val aabs = dir.listFiles { _, name -> name.endsWith(".aab") }?.toList() ?: emptyList()
+        check(aabs.isNotEmpty()) {
+            "no .aab found in $dir"
         }
-        val built = aabs[0]
+        // AGP emits app-release.aab; we may also keep lane-shooter-*.aab from a prior run—pick the fresh artifact.
+        val built = aabs.firstOrNull { it.name == "app-release.aab" }
+            ?: aabs.filter { it.name.endsWith("-release.aab") }.maxByOrNull { it.lastModified() }
+            ?: aabs.maxBy { it.lastModified() }
         val final = File(dir, "lane-shooter-$safeVersion.aab")
         if (built.canonicalFile == final.canonicalFile) return@doLast
         final.delete()
