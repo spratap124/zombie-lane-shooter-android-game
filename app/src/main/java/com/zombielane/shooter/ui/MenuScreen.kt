@@ -499,27 +499,59 @@ class MenuScreen {
         val labelTs = 22f * s
         val scoreTs = 32f * s
         val lineGap = 8f * s
-        var wBestCol = 0f
-        var labelBaseline = shipCy
-        var scoreBaseline = shipCy
+        val statSectionGap = 10f * s
+        val maxStageReached = upgradeManager.lifetimeMaxStage.coerceAtLeast(1)
+        val stageStr = maxStageReached.toString()
+
+        highScorePaint.textAlign = Paint.Align.LEFT
         val scoreStr = if (highScore > 0) highScore.toString() else ""
+
+        var wBestCol = 0f
+        var fmBestLabel = highScorePaint.fontMetrics
+        var fmBestScore = highScorePaint.fontMetrics
+        var bestLabelBaseline = shipCy
+        var bestScoreBaseline = shipCy
+        var bestBlockH = 0f
         if (highScore > 0) {
-            highScorePaint.textAlign = Paint.Align.LEFT
             highScorePaint.textSize = scoreTs
             highScorePaint.color = Color.parseColor("#FFE082")
-            val fmScore = highScorePaint.fontMetrics
+            fmBestScore = highScorePaint.fontMetrics
             val wScore = highScorePaint.measureText(scoreStr)
             highScorePaint.textSize = labelTs
             highScorePaint.color = Color.parseColor("#B0BEC5")
-            val fmLabel = highScorePaint.fontMetrics
+            fmBestLabel = highScorePaint.fontMetrics
             val wLabel = highScorePaint.measureText("BEST")
             wBestCol = max(wLabel, wScore)
-            val blockH = (fmLabel.descent - fmLabel.ascent) + lineGap + (fmScore.descent - fmScore.ascent)
-            labelBaseline = shipCy - blockH / 2f - fmLabel.ascent
-            highScorePaint.textSize = scoreTs
-            val fmScoreLine = highScorePaint.fontMetrics
-            scoreBaseline = labelBaseline + fmLabel.descent + lineGap - fmScoreLine.ascent
+            bestBlockH =
+                (fmBestLabel.descent - fmBestLabel.ascent) + lineGap + (fmBestScore.descent - fmBestScore.ascent)
         }
+
+        highScorePaint.textSize = labelTs
+        highScorePaint.color = Color.parseColor("#B0BEC5")
+        val fmStageLabel = highScorePaint.fontMetrics
+        val wStageLabel = highScorePaint.measureText("MAX STAGE")
+        highScorePaint.textSize = scoreTs
+        highScorePaint.color = Color.parseColor("#FFE082")
+        val fmStageVal = highScorePaint.fontMetrics
+        val wStageNum = highScorePaint.measureText(stageStr)
+        val wStageCol = max(wStageLabel, wStageNum)
+        val stageBlockH =
+            (fmStageLabel.descent - fmStageLabel.ascent) + lineGap + (fmStageVal.descent - fmStageVal.ascent)
+
+        val wLeftCol = max(wBestCol, wStageCol)
+        val totalLeftStackH = bestBlockH + (if (highScore > 0) statSectionGap else 0f) + stageBlockH
+        val leftFlankStackTop = shipCy - totalLeftStackH / 2f
+
+        if (highScore > 0) {
+            bestLabelBaseline = leftFlankStackTop - fmBestLabel.ascent
+            bestScoreBaseline = bestLabelBaseline + fmBestLabel.descent + lineGap - fmBestScore.ascent
+        }
+        val stageLabelBaseline = if (highScore > 0) {
+            bestScoreBaseline + fmBestScore.descent + statSectionGap - fmStageLabel.ascent
+        } else {
+            leftFlankStackTop - fmStageLabel.ascent
+        }
+        val stageValueBaseline = stageLabelBaseline + fmStageLabel.descent + lineGap - fmStageVal.ascent
 
         coinPaint.textSize = 36f * s
         coinPaint.color = Color.parseColor("#FFE082")
@@ -534,21 +566,29 @@ class MenuScreen {
         val coinNudgeLeft = 74f * s
         val coinAnchorX = rightmostChestRight - coinNudgeLeft
 
+        var bestLeftX = edgePad
+        if (bestLeftX + wLeftCol > shipInnerLeft) {
+            bestLeftX = (shipInnerLeft - wLeftCol).coerceAtLeast(edgePad)
+        }
         if (highScore > 0) {
-            var bestLeftX = edgePad
-            if (bestLeftX + wBestCol > shipInnerLeft) {
-                bestLeftX = (shipInnerLeft - wBestCol).coerceAtLeast(edgePad)
-            }
             highScorePaint.textSize = labelTs
             highScorePaint.color = Color.parseColor("#B0BEC5")
             highScorePaint.setShadowLayer(6f * s * uiFlicker, 0f, 2f * s, Color.BLACK)
-            canvas.drawText("BEST", bestLeftX, labelBaseline, highScorePaint)
+            canvas.drawText("BEST", bestLeftX, bestLabelBaseline, highScorePaint)
             highScorePaint.textSize = scoreTs
             highScorePaint.color = Color.parseColor("#FFE082")
-            canvas.drawText(scoreStr, bestLeftX, scoreBaseline, highScorePaint)
+            canvas.drawText(scoreStr, bestLeftX, bestScoreBaseline, highScorePaint)
             highScorePaint.clearShadowLayer()
             highScorePaint.textSize = 34f * s
         }
+        highScorePaint.textSize = labelTs
+        highScorePaint.color = Color.parseColor("#B0BEC5")
+        highScorePaint.setShadowLayer(6f * s * uiFlicker, 0f, 2f * s, Color.BLACK)
+        canvas.drawText("MAX STAGE", bestLeftX, stageLabelBaseline, highScorePaint)
+        highScorePaint.textSize = scoreTs
+        highScorePaint.color = Color.parseColor("#FFE082")
+        canvas.drawText(stageStr, bestLeftX, stageValueBaseline, highScorePaint)
+        highScorePaint.clearShadowLayer()
 
         var coinLeftX = coinAnchorX
         if (coinLeftX + coinColW > edgeRight) {
