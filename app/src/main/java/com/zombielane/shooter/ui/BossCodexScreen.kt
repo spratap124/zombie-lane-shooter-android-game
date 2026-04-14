@@ -45,16 +45,6 @@ class BossCodexScreen {
         typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
         textAlign = Paint.Align.LEFT
     }
-    private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#90A4AE")
-        typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-        textAlign = Paint.Align.CENTER
-    }
-    private val bestStageDebugPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#B0BEC5")
-        typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
-        textAlign = Paint.Align.CENTER
-    }
     private val lockEmojiPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         typeface = Typeface.DEFAULT
@@ -198,20 +188,7 @@ class BossCodexScreen {
         xBlock += coinSize + gapAfterCoin
         canvas.drawText(coinStr, xBlock, baselineStats, subPaint)
 
-        bestStageDebugPaint.textSize = 18f * ts
-        val fmBest = bestStageDebugPaint.fontMetrics
-        val bestStageBaseline = baselineStats + (-fmSub.ascent + fmSub.descent) + 12f * ts
-        canvas.drawText("Best Stage: $life", cx, bestStageBaseline, bestStageDebugPaint)
-
-        hintPaint.textSize = 15f * ts
-        val fmHint = hintPaint.fontMetrics
-        val hintGap = 8f * ts
-        var hintBaseline = bestStageBaseline + (-fmBest.ascent + fmBest.descent) + hintGap
-        canvas.drawText("Boss #1 to #14 are always available.", cx, hintBaseline, hintPaint)
-        hintBaseline += (-fmHint.ascent + fmHint.descent) + 4f * ts
-        canvas.drawText("Bosses #15+ unlock with rewarded ads (30 min) or coins.", cx, hintBaseline, hintPaint)
-
-        val headerBottom = hintBaseline + (-fmHint.ascent + fmHint.descent) + 10f * ts
+        val headerBottom = baselineStats + fmSub.descent + 18f * ts
         val detailH = (200f * ts).coerceIn(168f, 260f)
         val gridTop = headerBottom + 8f * ts
         val gridBottom = contentBottom - detailH - 14f * ts
@@ -349,7 +326,7 @@ class BossCodexScreen {
                 val adReady = rewardedAdReady && !watchAdInFlight
                 val adLabel = when {
                     watchAdInFlight -> "Loading ad…"
-                    adReady -> "▶  Watch Ad - 30m Unlock"
+                    adReady -> "30m Unlock"
                     else -> "Ad loading…"
                 }
                 drawPremiumWatchAdButton(

@@ -1,6 +1,8 @@
 package com.zombielane.shooter.ads
 
 import android.app.Activity
+import android.content.Context
+import android.content.SharedPreferences
 import android.util.Log
 import android.view.View
 import com.google.android.gms.ads.AdError
@@ -25,7 +27,11 @@ class AdManager(private val activity: Activity) {
         private val INTERSTITIAL_ID = BuildConfig.ADMOB_INTERSTITIAL_ID
         private val REWARDED_ID = BuildConfig.ADMOB_REWARDED_ID
 
-        private const val DEATHS_PER_INTERSTITIAL = 3
+        /** Show an interstitial after every Nth completed game over (persists across app restarts). */
+        private const val GAME_OVERS_PER_INTERSTITIAL = 4
+
+        private const val PREFS = "zombie_lane_ad_manager"
+        private const val KEY_GAME_OVER_COUNT = "game_over_count_interstitial"
     }
 
     interface RewardListener {
@@ -44,7 +50,9 @@ class AdManager(private val activity: Activity) {
     private val rewardedLoadCallbacks = ArrayList<(Boolean) -> Unit>()
     private var pendingRewardType: String? = null
 
-    private var deathCount = 0
+    private val prefs: SharedPreferences =
+        activity.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
     private var isInitialized = false
 
     fun initialize() {
@@ -105,12 +113,25 @@ class AdManager(private val activity: Activity) {
         )
     }
 
+    /**
+     * Call once when a run ends on the game-over screen (not per life lost mid-run).
+     * Increments persisted count; every [GAME_OVERS_PER_INTERSTITIAL]th game over is eligible for an interstitial.
+     */
     fun onPlayerDeath() {
-        deathCount++
+        val next = prefs.getInt(KEY_GAME_OVER_COUNT, 0) + 1
+        prefs.edit().putInt(KEY_GAME_OVER_COUNT, next).apply()
+        // Next game over might be the 3rd — ensure we have an ad ready if the last load failed.
+        if (next % GAME_OVERS_PER_INTERSTITIAL == GAME_OVERS_PER_INTERSTITIAL - 1 && interstitialAd == null) {
+            loadInterstitial()
+        }
     }
 
-    fun shouldShowInterstitial(): Boolean =
-        deathCount > 0 && deathCount % DEATHS_PER_INTERSTITIAL == 0 && interstitialAd != null
+    fun shouldShowInterstitial(): Boolean {
+        val c = prefs.getInt(KEY_GAME_OVER_COUNT, 0)
+        return c > 0 &&
+            c % GAME_OVERS_PER_INTERSTITIAL == 0 &&
+            interstitialAd != null
+    }
 
     fun showInterstitial(onDismissed: (() -> Unit)? = null) {
         val ad = interstitialAd ?: run {
