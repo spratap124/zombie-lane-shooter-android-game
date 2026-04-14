@@ -263,6 +263,7 @@ class MenuScreen {
     var settingsBtnRect = RectF()
     var chestsNavRect = RectF()
     var dailyMissionsBtnRect = RectF()
+    var bossesBtnRect = RectF()
     var freeRewardAdRect = RectF()
     var streakOkRect = RectF()
 
@@ -662,15 +663,29 @@ class MenuScreen {
         yPos += playH + 20f * s
 
         val dailyBmp = menuUi.dailyMissionsButton
+        val bossBmp = menuUi.bossesButton
         val weaponBmp = menuUi.weaponsButton
-        val pairGap = 12f * s
+        val pairGap = 10f * s
         val pairInnerW = safeArea.width() - 2f * padH
+        val pairRowLeft = safeArea.left + padH
+
+        // Boss Zombies — under PLAY; smaller than PLAY so it stays a secondary CTA
+        val bossBtnW = playW * 0.54f
+        val bossAr = bossBmp.height.toFloat() / bossBmp.width.coerceAtLeast(1)
+        var bossRowH = bossBtnW * bossAr
+        bossRowH = bossRowH.coerceIn(safeArea.height() * 0.038f, safeArea.height() * 0.078f)
+        bossesBtnRect.set(cx - bossBtnW / 2f, yPos, cx + bossBtnW / 2f, yPos + bossRowH)
+        tmpRect.set(bossesBtnRect)
+        drawBitmapFit(canvas, bossBmp, tmpRect)
+
+        yPos += bossRowH + 14f * s
+
+        // Daily Missions + Weapons — one row, two equal columns
         val halfW = (pairInnerW - pairGap) / 2f
         val dailyAr = dailyBmp.height.toFloat() / dailyBmp.width.coerceAtLeast(1)
         val weaponAr = weaponBmp.height.toFloat() / weaponBmp.width.coerceAtLeast(1)
         val rowHUnscaled = max(halfW * dailyAr, halfW * weaponAr)
         val rowH = rowHUnscaled.coerceIn(safeArea.height() * 0.072f, safeArea.height() * 0.16f)
-        val pairRowLeft = safeArea.left + padH
         dailyMissionsBtnRect.set(pairRowLeft, yPos, pairRowLeft + halfW, yPos + rowH)
         shopBtnRect.set(pairRowLeft + halfW + pairGap, yPos, pairRowLeft + pairInnerW, yPos + rowH)
         tmpRect.set(dailyMissionsBtnRect)

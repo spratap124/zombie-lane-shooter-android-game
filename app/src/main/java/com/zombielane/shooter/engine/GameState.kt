@@ -9,5 +9,6 @@ enum class GameState {
     SETTINGS,
     SHOP,
     CHESTS,
-    DAILY_MISSIONS
+    DAILY_MISSIONS,
+    BOSS_CODEX
 }

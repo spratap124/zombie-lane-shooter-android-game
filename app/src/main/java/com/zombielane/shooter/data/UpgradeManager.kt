@@ -2,6 +2,7 @@ package com.zombielane.shooter.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.zombielane.shooter.BuildConfig
 
 class UpgradeManager(context: Context) {
 
@@ -12,6 +13,8 @@ class UpgradeManager(context: Context) {
         private const val KEY_FIRE_RATE_LEVEL = "upgrade_fire_rate"
         private const val KEY_HEALTH_LEVEL = "upgrade_health"
         private const val KEY_HIGH_SCORE = "high_score"
+        /** Highest stage number reached in any run (for boss unlock progression); not reset by daily mission period. */
+        private const val KEY_LIFETIME_MAX_STAGE = "lifetime_max_stage"
 
         private const val BASE_DAMAGE = 1
         private const val BASE_FIRE_INTERVAL_MS = 130L
@@ -33,6 +36,20 @@ class UpgradeManager(context: Context) {
     var highScore: Int
         get() = prefs.getInt(KEY_HIGH_SCORE, 0)
         set(value) = prefs.edit().putInt(KEY_HIGH_SCORE, value).apply()
+
+    /** Best stage reached (≥1). Used for boss codex progression unlocks. */
+    val lifetimeMaxStage: Int get() = prefs.getInt(KEY_LIFETIME_MAX_STAGE, 1)
+
+    fun bumpLifetimeMaxStageIfHigher(stageNumber: Int) {
+        val cur = lifetimeMaxStage
+        if (stageNumber > cur) prefs.edit().putInt(KEY_LIFETIME_MAX_STAGE, stageNumber).apply()
+    }
+
+    /** DEBUG builds only — sets best stage for Boss Codex lock testing without a long run. */
+    fun debugSetLifetimeMaxStage(stage: Int) {
+        if (!BuildConfig.DEBUG) return
+        prefs.edit().putInt(KEY_LIFETIME_MAX_STAGE, stage.coerceAtLeast(1)).apply()
+    }
 
     val damageLevel: Int get() = prefs.getInt(KEY_DAMAGE_LEVEL, 0)
     val fireRateLevel: Int get() = prefs.getInt(KEY_FIRE_RATE_LEVEL, 0)

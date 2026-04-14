@@ -27,6 +27,7 @@ class MenuUiAssets(resources: Resources) {
     /** Sci-fi back control; from [images/back_button_2.png]. */
     val backButton: Bitmap
     val weaponsButton: Bitmap
+    val bossesButton: Bitmap
     val settingsIcon: Bitmap
     private val chestBitmaps: Map<ChestType, Bitmap>
     private val chestOpenBitmaps: Map<ChestType, Bitmap>
@@ -58,6 +59,12 @@ class MenuUiAssets(resources: Resources) {
             decodeAssetFitWidth(assets, "images/weapons_button_2.png", weaponsW)
         } catch (_: Exception) {
             decodeFitWidth(resources, R.drawable.ui_weapons, weaponsW)
+        }
+
+        bossesButton = try {
+            decodeAssetFitWidth(assets, "images/boss_zombies_button1.png", dailyW)
+        } catch (_: Exception) {
+            placeholderWideButtonBitmap(dailyW, Color.parseColor("#B71C1C"))
         }
 
         val settingsPx = (92f * density).toInt().coerceIn(72, 168)

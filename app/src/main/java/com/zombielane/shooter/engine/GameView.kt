@@ -10,9 +10,11 @@ import android.graphics.Typeface
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import android.view.ViewConfiguration
 import com.zombielane.shooter.ads.AdManager
 import com.zombielane.shooter.audio.GameFeedback
 import com.zombielane.shooter.data.ChestGrantResult
+import com.zombielane.shooter.data.BossUnlockManager
 import com.zombielane.shooter.data.DailyMissionManager
 import com.zombielane.shooter.data.ChestManager
 import com.zombielane.shooter.data.ChestOpenResult
@@ -28,6 +30,7 @@ import com.zombielane.shooter.data.UpgradeManager
 import com.zombielane.shooter.objects.*
 import com.zombielane.shooter.ui.*
 import kotlin.jvm.Volatile
+import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.random.Random
@@ -80,6 +83,8 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     private val chestRevealUI = ChestRevealUI()
     private val chestOpeningAnimator = ChestOpeningAnimator()
     private val dailyMissionsScreen = DailyMissionsScreen()
+    private val bossCodexScreen = BossCodexScreen()
+    private val bossUnlockManager = BossUnlockManager(context)
     private val chestBurstParticles = mutableListOf<Particle>()
     private val chestSlotVisual = Array(ChestManager.MAX_SLOTS) { ChestVisualState.CLOSED }
     private val playerAssets = PlayerAssets(resources)
@@ -107,6 +112,21 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     /** Menu “free reward” rewarded ad; ignore double taps while presenting. */
     private var menuFreeRewardAdInFlight = false
+
+    private var bossCodexScrollY = 0f
+    private var bossCodexDragLastY = 0f
+    /** Finger is down in the boss grid (scroll vs tap decided after touch slop). */
+    private var bossCodexGridPointerDown = false
+    /** True once vertical movement exceeds slop — scrolling, not a cell tap. */
+    private var bossCodexScrollGesture = false
+    private var bossCodexTouchDownY = 0f
+    private val bossCodexTouchSlop by lazy(LazyThreadSafetyMode.NONE) {
+        ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+    }
+    private var bossCodexSelectedIndex = 0
+    private var bossCodexWatchAdInFlight = false
+    private var bossCodexWatchAdPressed = false
+    private var bossCodexPermUnlockPressed = false
 
     /** Rewarded continue; reset in [resetGame]. */
     private var hasUsedContinue = false
@@ -333,6 +353,12 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 state = GameState.MENU
                 true
             }
+            GameState.BOSS_CODEX -> {
+                bossCodexWatchAdPressed = false
+                bossCodexPermUnlockPressed = false
+                state = GameState.MENU
+                true
+            }
             GameState.MENU -> false
         }
     }
@@ -505,7 +531,12 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             }
 
             if (stageManager.shouldSpawnBoss()) {
-                enemies.add(enemySpawner.spawnBoss(safeArea, score, stage))
+                val bossSkin = bossUnlockManager.resolveSkinForStage(
+                    stage.stageNumber,
+                    upgradeManager.lifetimeMaxStage,
+                    now
+                )
+                enemies.add(enemySpawner.spawnBoss(safeArea, score, stage, bossSkin))
                 stageManager.markBossSpawned()
                 floatingTexts.add(FloatingText(
                     screenW / 2f, screenH * 0.3f, "STAGE ${stage.stageNumber} BOSS!",
@@ -574,6 +605,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             chestManager,
             now
         )
+        upgradeManager.bumpLifetimeMaxStageIfHigher(stageManager.currentStage.stageNumber)
 
         if (player.isDead) {
             if (!hasUsedContinue) {
@@ -845,6 +877,8 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     private fun finalizeGameOver() {
         gameFeedback.onGameOver()
+        // Ensure best-stage progression is saved for Boss Codex gating (same value last PLAYING frame had).
+        upgradeManager.bumpLifetimeMaxStageIfHigher(stageManager.currentStage.stageNumber)
         state = GameState.GAME_OVER
         gameEndTimeMs = System.currentTimeMillis()
         gameOverEarnedCoins = sessionCoins
@@ -1028,6 +1062,26 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 )
                 if (nowDm < missionCompleteBannerUntilMs) drawMissionCompleteBanner(canvas)
             }
+            GameState.BOSS_CODEX -> {
+                val nowBc = System.currentTimeMillis()
+                val toast = if (nowBc < chestToastUntilMs) chestToastText else null
+                bossCodexScreen.draw(
+                    canvas,
+                    safeArea,
+                    enemyAssets,
+                    bossUnlockManager,
+                    upgradeManager,
+                    bossCodexSelectedIndex,
+                    bossCodexScrollY,
+                    nowBc,
+                    menuUiAssets,
+                    briefToast = toast,
+                    rewardedAdReady = adManager?.isRewardedReady() == true,
+                    watchAdInFlight = bossCodexWatchAdInFlight,
+                    watchAdPressed = bossCodexWatchAdPressed,
+                    permUnlockPressed = bossCodexPermUnlockPressed
+                )
+            }
         }
     }
 
@@ -1100,7 +1154,10 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (event.action != MotionEvent.ACTION_DOWN && event.action != MotionEvent.ACTION_MOVE) return true
+        val a = event.action
+        if (a != MotionEvent.ACTION_DOWN && a != MotionEvent.ACTION_MOVE &&
+            a != MotionEvent.ACTION_UP && a != MotionEvent.ACTION_CANCEL
+        ) return true
         val tx = event.x
         val ty = event.y
 
@@ -1114,6 +1171,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             GameState.SHOP -> if (event.action == MotionEvent.ACTION_DOWN) handleShopTouch(tx, ty)
             GameState.CHESTS -> if (event.action == MotionEvent.ACTION_DOWN) handleChestScreenTouch(tx, ty)
             GameState.DAILY_MISSIONS -> if (event.action == MotionEvent.ACTION_DOWN) handleDailyMissionsTouch(tx, ty)
+            GameState.BOSS_CODEX -> handleBossCodexTouch(a, tx, ty)
         }
         return true
     }
@@ -1137,6 +1195,93 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         ) {
             state = GameState.MENU
         }
+    }
+
+    private fun handleBossCodexTouch(action: Int, tx: Float, ty: Float) {
+        val now = System.currentTimeMillis()
+        when (action) {
+            MotionEvent.ACTION_DOWN -> {
+                bossCodexWatchAdPressed = bossCodexScreen.watchAdBtnRect.contains(tx, ty)
+                bossCodexPermUnlockPressed = bossCodexScreen.permUnlockBtnRect.contains(tx, ty)
+                if (bossCodexScreen.backBtnRect.contains(tx, ty)) {
+                    bossCodexGridPointerDown = false
+                    bossCodexScrollGesture = false
+                    bossCodexWatchAdPressed = false
+                    bossCodexPermUnlockPressed = false
+                    state = GameState.MENU
+                    return
+                }
+                if (bossCodexScreen.watchAdBtnRect.contains(tx, ty)) {
+                    if (bossCodexWatchAdInFlight) return
+                    val am = adManager ?: return
+                    am.preloadRewarded()
+                    if (!am.isRewardedReady()) {
+                        showBossCodexToast("Ad loading — try again shortly")
+                        return
+                    }
+                    val idx = bossCodexSelectedIndex
+                    bossCodexWatchAdInFlight = true
+                    am.showRewardedAd { earned, _ ->
+                        bossCodexWatchAdInFlight = false
+                        val t = System.currentTimeMillis()
+                        if (earned && bossUnlockManager.grantTemporaryFromAd(idx, upgradeManager.lifetimeMaxStage, t)) {
+                            showBossCodexToast("30 min access unlocked")
+                        } else if (earned) {
+                            showBossCodexToast("Already permanent — no trial needed")
+                        } else {
+                            showBossCodexToast("Ad not completed")
+                        }
+                    }
+                    return
+                }
+                if (bossCodexScreen.permUnlockBtnRect.contains(tx, ty)) {
+                    val idx = bossCodexSelectedIndex
+                    val life = upgradeManager.lifetimeMaxStage
+                    if (bossUnlockManager.unlockPermanent(idx, upgradeManager, life)) {
+                        showBossCodexToast("Boss owned permanently")
+                    } else {
+                        showBossCodexToast("Need more coins or already unlocked by stage")
+                    }
+                    return
+                }
+                if (bossCodexScreen.gridRect.contains(tx, ty)) {
+                    bossCodexGridPointerDown = true
+                    bossCodexScrollGesture = false
+                    bossCodexTouchDownY = ty
+                    bossCodexDragLastY = ty
+                }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (!bossCodexGridPointerDown) return
+                if (!bossCodexScrollGesture) {
+                    if (abs(ty - bossCodexTouchDownY) < bossCodexTouchSlop) return
+                    bossCodexScrollGesture = true
+                }
+                val delta = bossCodexDragLastY - ty
+                bossCodexDragLastY = ty
+                bossCodexScrollY =
+                    (bossCodexScrollY + delta).coerceIn(0f, bossCodexScreen.lastMaxScrollY)
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                bossCodexWatchAdPressed = false
+                bossCodexPermUnlockPressed = false
+                if (bossCodexGridPointerDown && !bossCodexScrollGesture) {
+                    for (i in bossCodexScreen.cellRects.indices) {
+                        if (bossCodexScreen.cellRects[i].contains(tx, ty)) {
+                            bossCodexSelectedIndex = i
+                            break
+                        }
+                    }
+                }
+                bossCodexGridPointerDown = false
+                bossCodexScrollGesture = false
+            }
+        }
+    }
+
+    private fun showBossCodexToast(msg: String) {
+        chestToastText = msg
+        chestToastUntilMs = System.currentTimeMillis() + 2800L
     }
 
     private fun handleMenuTouch(tx: Float, ty: Float) {
@@ -1164,6 +1309,17 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             menuScreen.dailyMissionsBtnRect.contains(tx, ty) -> {
                 previousState = GameState.MENU
                 state = GameState.DAILY_MISSIONS
+            }
+            menuScreen.bossesBtnRect.contains(tx, ty) -> {
+                previousState = GameState.MENU
+                bossCodexScrollY = 0f
+                bossCodexGridPointerDown = false
+                bossCodexScrollGesture = false
+                bossCodexWatchAdInFlight = false
+                bossCodexWatchAdPressed = false
+                bossCodexPermUnlockPressed = false
+                post { adManager?.preloadRewarded() }
+                state = GameState.BOSS_CODEX
             }
             menuScreen.chestsNavRect.contains(tx, ty) -> {
                 previousState = GameState.MENU
@@ -1297,6 +1453,7 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 chestManager.resetProgress()
                 streakManager.resetProgress()
                 runBuffManager.resetProgress()
+                bossUnlockManager.resetProgress()
                 settingsScreen.confirmResetActive = false
             } else {
                 settingsScreen.confirmResetActive = true

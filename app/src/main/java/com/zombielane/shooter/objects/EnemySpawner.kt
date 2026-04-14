@@ -38,8 +38,8 @@ class EnemySpawner {
         return result
     }
 
-    fun spawnBoss(safeArea: RectF, score: Int, stage: Stage): Enemy {
-        return createBoss(safeArea, score, stage)
+    fun spawnBoss(safeArea: RectF, score: Int, stage: Stage, bossSkinIndex: Int): Enemy {
+        return createBoss(safeArea, score, stage, bossSkinIndex)
     }
 
     fun spawnBurst(count: Int, safeArea: RectF, score: Int, stage: Stage): List<Enemy> {
@@ -118,7 +118,7 @@ class EnemySpawner {
         )
     }
 
-    private fun createBoss(safeArea: RectF, score: Int, stage: Stage): Enemy {
+    private fun createBoss(safeArea: RectF, score: Int, stage: Stage, bossSkinIndex: Int): Enemy {
         val x = safeArea.left + (safeArea.width() - Enemy.BOSS_SIZE) / 2f
         val bossHp = 12 + stage.stageNumber * 5
         return Enemy(
@@ -129,7 +129,7 @@ class EnemySpawner {
             bodyColor = Color.parseColor("#B71C1C"),
             health = bossHp, type = EnemyType.BOSS,
             canShoot = stage.stageNumber > Stage.INTRO_STAGE_COUNT, shootInterval = 3600L,
-            bossSkinIndex = bossSkinForStage(stage.stageNumber)
+            bossSkinIndex = bossSkinIndex.mod(EnemyAssets.BOSS_SKIN_COUNT)
         )
     }
 
