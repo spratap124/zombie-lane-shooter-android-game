@@ -1,3 +1,4 @@
 -keepclassmembers class com.zombielane.shooter.** { *; }
 -keep class com.google.android.gms.ads.** { *; }
 -keep class com.google.ads.** { *; }
+-keep class com.google.android.play.core.** { *; }

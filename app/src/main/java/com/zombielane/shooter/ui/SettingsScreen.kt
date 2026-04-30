@@ -58,12 +58,26 @@ class SettingsScreen {
         textAlign = Paint.Align.CENTER
     }
 
+    private val versionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#90A4AE")
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+    }
+
     var toggleRects = mutableListOf<RectF>()
     var resetBtnRect = RectF()
     var backBtnRect = RectF()
     var confirmResetActive = false
 
-    fun draw(canvas: Canvas, safeArea: RectF, settings: SettingsManager, backButton: Bitmap) {
+    fun draw(
+        canvas: Canvas,
+        safeArea: RectF,
+        settings: SettingsManager,
+        backButton: Bitmap,
+        appVersionLabel: String,
+        /** Pixels to lift content above the overlaid bottom ad banner ([SurfaceView] is full-screen). */
+        bannerReserveFromBottomPx: Float,
+    ) {
         val w = canvas.width.toFloat()
         val h = canvas.height.toFloat()
         val cx = w / 2f
@@ -134,5 +148,9 @@ class SettingsScreen {
             yPos += resetH + 10f * s
             canvas.drawText("This will erase all coins & upgrades!", cx, yPos, warnPaint)
         }
+
+        versionPaint.textSize = 28f * s
+        val versionY = safeArea.bottom - bannerReserveFromBottomPx - 14f * s
+        canvas.drawText(appVersionLabel, cx, versionY, versionPaint)
     }
 }

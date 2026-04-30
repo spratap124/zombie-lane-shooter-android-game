@@ -84,6 +84,16 @@ class Player(
         invincibleFrames = 90
     }
 
+    /** Keeps the ship in the play lane after rotation or window resize ([safeArea] / screen size change). */
+    fun repositionForSafeArea(safeArea: RectF) {
+        y = safeArea.bottom - PLAYER_HEIGHT - BOTTOM_MARGIN
+        val maxX = (safeArea.right - width).coerceAtLeast(safeArea.left)
+        x = x.coerceIn(safeArea.left, maxX)
+        val minCenter = safeArea.left + width / 2f
+        val maxCenter = safeArea.right - width / 2f
+        targetX = targetX.coerceIn(minCenter, maxCenter)
+    }
+
     fun update(screenWidth: Int, screenHeight: Int, safeArea: RectF) {
         frameAge++
         val nowMs = System.currentTimeMillis()

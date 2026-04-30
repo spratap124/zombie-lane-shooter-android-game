@@ -10,7 +10,10 @@ import android.graphics.Typeface
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import android.view.View
 import android.view.ViewConfiguration
+import com.google.android.gms.ads.AdSize
+import com.zombielane.shooter.BuildConfig
 import com.zombielane.shooter.ads.AdManager
 import com.zombielane.shooter.audio.GameFeedback
 import com.zombielane.shooter.data.ChestGrantResult
@@ -221,6 +224,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
         insetRight = right
         insetBottom = bottom
         recalcSafeArea()
+        if (::player.isInitialized) {
+            player.repositionForSafeArea(safeArea)
+        }
     }
 
     private fun recalcSafeArea() {
@@ -230,6 +236,14 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
             screenW - insetRight - SIDE_PADDING,
             screenH - insetBottom - GAME_PADDING
         )
+    }
+
+    /** Bottom banner overlays the [SurfaceView]; reserve its height so UI (e.g. settings version) sits above it. */
+    private fun bannerReserveFromBottomPx(): Float {
+        val ad = adManager?.bannerAdView ?: return 0f
+        if (ad.visibility != View.VISIBLE) return 0f
+        val h = ad.height
+        return if (h > 0) h.toFloat() else AdSize.BANNER.getHeightInPixels(context).toFloat()
     }
 
     /** Keeps [x] inside the horizontal play lane; [coerceIn] throws if the lane is narrower than [width]. */
@@ -254,9 +268,16 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        val sizeChanged = screenW != width || screenH != height
         screenW = width
         screenH = height
         recalcSafeArea()
+        if (sizeChanged) {
+            backgroundManager.init(screenW, screenH)
+            if (::player.isInitialized) {
+                player.repositionForSafeArea(safeArea)
+            }
+        }
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -1037,7 +1058,9 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
                 canvas,
                 safeArea,
                 settingsManager,
-                menuUiAssets.backButton
+                menuUiAssets.backButton,
+                "Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                bannerReserveFromBottomPx(),
             )
             GameState.SHOP -> shopScreen.draw(
                 canvas,

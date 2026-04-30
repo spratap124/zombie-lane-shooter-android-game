@@ -45,8 +45,8 @@ android {
         applicationId = "com.zombielane.shooter"
         minSdk = 24
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.0.7"
+        versionCode = 14
+        versionName = "1.1.2"
 
         // Debug / local: admob.*.id.test in local.properties (see release for production).
         manifestPlaceholders["admobApplicationId"] = admobTestApplicationId
@@ -137,6 +137,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.gms:play-services-ads:23.6.0")
+    implementation("com.google.android.play:app-update-ktx:2.1.0")
 }
 
 afterEvaluate {

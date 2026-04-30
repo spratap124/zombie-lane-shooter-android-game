@@ -11,6 +11,11 @@ import com.zombielane.shooter.engine.GameEventManager
 
 class HUD {
 
+    companion object {
+        /** Extra space below [safeArea.top] so score/stage/hearts clear the bezel and notch. */
+        private const val EXTRA_TOP_PAD_FACTOR = 26f // multiplied by [s] (1080-ref scale)
+    }
+
     private val scorePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
@@ -72,24 +77,24 @@ class HUD {
     }
 
     private val tempTimerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#FF9800")
+        color = Color.parseColor("#FFB74D")
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         textAlign = Paint.Align.CENTER
-        setShadowLayer(3f, 1f, 1f, Color.BLACK)
+        setShadowLayer(4f, 1f, 2f, Color.BLACK)
     }
 
     private val stageLabelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#90A4AE")
+        color = Color.parseColor("#ECEFF1")
         typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
         textAlign = Paint.Align.CENTER
-        setShadowLayer(3f, 1f, 1f, Color.BLACK)
+        setShadowLayer(4f, 1f, 2f, Color.BLACK)
     }
 
     private val stageNamePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
         textAlign = Paint.Align.CENTER
-        setShadowLayer(3f, 1f, 1f, Color.BLACK)
+        setShadowLayer(4f, 1f, 2f, Color.BLACK)
     }
 
     private val progressBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -128,25 +133,27 @@ class HUD {
         val right = safeArea.right
         val w = canvas.width.toFloat()
         val s = w / 1080f
+        val t = top + EXTRA_TOP_PAD_FACTOR * s
 
         scorePaint.textSize = 48f * s
         coinPaint.textSize = 44f * s
         comboPaint.textSize = 56f * s
         eventBannerPaint.textSize = 34f * s
         fpsPaint.textSize = 24f * s
-        shooterNamePaint.textSize = 24f * s
-        tempTimerPaint.textSize = 20f * s
+        shooterNamePaint.textSize = 28f * s
+        tempTimerPaint.textSize = 32f * s
 
-        canvas.drawText("SCORE: $score", left, top + 48f * s, scorePaint)
+        canvas.drawText("SCORE: $score", left, t + 48f * s, scorePaint)
 
-        val coinY = top + 100f * s
+        // Below enlarged top-center stage block
+        val coinY = t + 128f * s
         canvas.drawCircle(left + 18f * s, coinY - 12f * s, 15f * s, coinIconPaint)
         canvas.drawText("$sessionCoins", left + 44f * s, coinY, coinPaint)
 
         // Pause button
         val pauseSize = 52f * s
         val pauseX = right - pauseSize
-        val pauseY = top + 74f * s
+        val pauseY = t + 74f * s
         pauseBtnRect = RectF(pauseX - 10f * s, pauseY - 10f * s, pauseX + pauseSize + 10f * s, pauseY + pauseSize + 10f * s)
         canvas.drawRoundRect(pauseBtnRect, 12f * s, 12f * s, pauseBtnPaint)
         val barW = 11f * s
@@ -163,31 +170,69 @@ class HUD {
         val heartsStartX = right - (playerMaxHealth * heartSpacing)
         for (i in 0 until playerMaxHealth) {
             val hx = heartsStartX + i * heartSpacing
-            val hy = top + 32f * s
+            val hy = t + 32f * s
             drawHeart(canvas, hx, hy, heartSize, i < playerHealth)
         }
 
-        // Shooter badge (top-left, below coins)
-        val badgeW = 110f * s
-        val badgeH = if (tempRemainingMs > 0) 50f * s else 34f * s
+        // Shooter badge (top-left, below coins) — two clear rows when temp timer is active
         val badgeX = left
-        val badgeY = top + 130f * s
-        shooterBadgePaint.color = Color.parseColor("#33FFFFFF")
-        canvas.drawRoundRect(badgeX, badgeY, badgeX + badgeW, badgeY + badgeH, 8f * s, 8f * s, shooterBadgePaint)
+        val badgeY = t + 158f * s
+        val badgeW = 152f * s
+        val badgePadV = 10f * s
+        val dotR = 7f * s
+        val dotX = badgeX + 14f * s
 
-        val dotX = badgeX + 16f * s
-        val dotY = badgeY + 17f * s
-        shooterBadgePaint.color = shooterColor
-        canvas.drawCircle(dotX, dotY, 7f * s, shooterBadgePaint)
+        shooterNamePaint.textSize = 28f * s
+        tempTimerPaint.textSize = 30f * s
 
-        shooterNamePaint.color = shooterColor
-        canvas.drawText(shooterName, badgeX + badgeW / 2f + 6f * s, badgeY + 24f * s, shooterNamePaint)
+        val badgeH: Float
+        val nameBaseline: Float
+        val dotY: Float
 
         if (tempRemainingMs > 0) {
+            val fmName = shooterNamePaint.fontMetrics
+            val fmTime = tempTimerPaint.fontMetrics
+            val rowGap = 8f * s
+            nameBaseline = badgeY + badgePadV - fmName.ascent
+            val timerBaseline = nameBaseline + fmName.descent + rowGap - fmTime.ascent
+            badgeH = (timerBaseline + fmTime.descent + badgePadV - badgeY).coerceAtLeast(64f * s)
+            dotY = nameBaseline + (fmName.ascent + fmName.descent) / 2f
+
+            shooterBadgePaint.color = Color.parseColor("#33FFFFFF")
+            canvas.drawRoundRect(badgeX, badgeY, badgeX + badgeW, badgeY + badgeH, 10f * s, 10f * s, shooterBadgePaint)
+
+            shooterBadgePaint.color = shooterColor
+            canvas.drawCircle(dotX, dotY, dotR, shooterBadgePaint)
+
+            shooterNamePaint.textAlign = Paint.Align.LEFT
+            shooterNamePaint.color = shooterColor
+            val nameStartX = badgeX + 28f * s
+            canvas.drawText(shooterName, nameStartX, nameBaseline, shooterNamePaint)
+            shooterNamePaint.textAlign = Paint.Align.CENTER
+
             val secs = (tempRemainingMs / 1000).toInt()
             val min = secs / 60
             val sec = secs % 60
-            canvas.drawText("${min}:${sec.toString().padStart(2, '0')}", badgeX + badgeW / 2f + 6f * s, badgeY + 44f * s, tempTimerPaint)
+            tempTimerPaint.textAlign = Paint.Align.CENTER
+            canvas.drawText(
+                "${min}:${sec.toString().padStart(2, '0')}",
+                badgeX + badgeW / 2f,
+                timerBaseline,
+                tempTimerPaint
+            )
+        } else {
+            badgeH = 40f * s
+            nameBaseline = badgeY + 26f * s
+            dotY = badgeY + 20f * s
+
+            shooterBadgePaint.color = Color.parseColor("#33FFFFFF")
+            canvas.drawRoundRect(badgeX, badgeY, badgeX + badgeW, badgeY + badgeH, 10f * s, 10f * s, shooterBadgePaint)
+
+            shooterBadgePaint.color = shooterColor
+            canvas.drawCircle(dotX, dotY, dotR, shooterBadgePaint)
+
+            shooterNamePaint.color = shooterColor
+            canvas.drawText(shooterName, badgeX + badgeW / 2f + 6f * s, nameBaseline, shooterNamePaint)
         }
 
         // Combo
@@ -197,12 +242,12 @@ class HUD {
                 comboTracker.displayCombo >= 5 -> Color.parseColor("#FFD600")
                 else -> Color.parseColor("#4CAF50")
             }
-            canvas.drawText("x${comboTracker.displayCombo} COMBO!", w / 2f, top + 56f * s, comboPaint)
+            canvas.drawText("x${comboTracker.displayCombo} COMBO!", w / 2f, t + 56f * s, comboPaint)
         }
 
         // Event banner
         if (eventManager.isActive) {
-            val bannerY = top + 128f * s
+            val bannerY = t + 148f * s
             val bannerH = 48f * s
             eventBgPaint.color = Color.parseColor("#44000000")
             canvas.drawRoundRect(w * 0.15f, bannerY, w * 0.85f, bannerY + bannerH, 12f * s, 12f * s, eventBgPaint)
@@ -210,24 +255,30 @@ class HUD {
             canvas.drawText(eventManager.bannerText ?: "", w / 2f, bannerY + 34f * s, eventBannerPaint)
         }
 
-        // Stage indicator (top-center, below combo/event area)
-        stageLabelPaint.textSize = 20f * s
-        stageNamePaint.textSize = 18f * s
-        val stageY = top + 100f * s
+        // Stage indicator (top-center; spaced below combo banner)
+        stageLabelPaint.textSize = 34f * s
+        stageNamePaint.textSize = 28f * s
+        val stageTitleBaseline = t + 94f * s
         canvas.drawText(
             if (endlessRun) "STAGE $stageNumber · ENDLESS" else "STAGE $stageNumber",
-            w / 2f, stageY, stageLabelPaint
+            w / 2f, stageTitleBaseline, stageLabelPaint
         )
-        if (stageName.isNotEmpty()) {
-            canvas.drawText(stageName, w / 2f, stageY + 18f * s, stageNamePaint)
+        val afterTitleY = if (stageName.isNotEmpty()) {
+            val nameBaseline = stageTitleBaseline + 32f * s
+            canvas.drawText(stageName, w / 2f, nameBaseline, stageNamePaint)
+            nameBaseline
+        } else {
+            stageTitleBaseline
         }
-        val barW2 = 140f * s
-        val barH2 = 6f * s
+        val barW2 = 220f * s
+        val barH2 = 12f * s
+        val barTop = afterTitleY + (if (stageName.isNotEmpty()) 14f * s else 10f * s)
         val barX2 = w / 2f - barW2 / 2f
-        val barY2 = stageY + 24f * s
-        canvas.drawRoundRect(barX2, barY2, barX2 + barW2, barY2 + barH2, 3f * s, 3f * s, progressBgPaint)
+        val barY2 = barTop
+        val barR = 4f * s
+        canvas.drawRoundRect(barX2, barY2, barX2 + barW2, barY2 + barH2, barR, barR, progressBgPaint)
         progressFillPaint.color = if (stageProgress >= 1f) Color.parseColor("#FFD600") else Color.parseColor("#4CAF50")
-        canvas.drawRoundRect(barX2, barY2, barX2 + barW2 * stageProgress, barY2 + barH2, 3f * s, 3f * s, progressFillPaint)
+        canvas.drawRoundRect(barX2, barY2, barX2 + barW2 * stageProgress, barY2 + barH2, barR, barR, progressFillPaint)
 
         if (showFps) {
             canvas.drawText("${fps} FPS", left, safeArea.bottom - 50f * s, fpsPaint)

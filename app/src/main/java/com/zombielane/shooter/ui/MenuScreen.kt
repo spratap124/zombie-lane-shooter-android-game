@@ -1097,6 +1097,53 @@ class MenuScreen {
         statBarBgPaint.color = Color.parseColor("#33252A3A")
     }
 
+    private data class ChestLabelLayout(
+        val iconBottom: Float,
+        val nameBaseline: Float,
+        val timerBaseline: Float,
+        val hintBaseline: Float?
+    )
+
+    /** Stacks labels from the bottom with real font metrics so text stays clear of the chest artwork. */
+    private fun layoutChestLabels(
+        r: RectF,
+        s: Float,
+        iconTop: Float,
+        includeHint: Boolean
+    ): ChestLabelLayout {
+        chestNamePaint.textSize = (12f * s).coerceIn(10f, 16f)
+        chestTimerPaint.textSize = (r.height() * 0.11f).coerceIn(14f * s, 22f * s)
+        chestHintPaint.textSize = 9f * s
+        val fmN = chestNamePaint.fontMetrics
+        val fmT = chestTimerPaint.fontMetrics
+        val fmH = chestHintPaint.fontMetrics
+        val padBottom = 8f * s
+        val lineGap = 6f * s
+        val iconGap = 10f * s
+        val minIconH = 30f * s
+
+        val nameBaseline: Float
+        val timerBaseline: Float
+        val hintBaseline: Float?
+
+        if (includeHint) {
+            val hb = r.bottom - padBottom - fmH.descent
+            hintBaseline = hb
+            timerBaseline = hb + fmH.ascent - lineGap - fmT.descent
+            nameBaseline = timerBaseline + fmT.ascent - lineGap - fmN.descent
+        } else {
+            hintBaseline = null
+            timerBaseline = r.bottom - padBottom - fmT.descent
+            nameBaseline = timerBaseline + fmT.ascent - lineGap - fmN.descent
+        }
+        val textTop = nameBaseline + fmN.ascent
+        var iconBottom = textTop - iconGap
+        if (iconBottom - iconTop < minIconH) {
+            iconBottom = iconTop + minIconH
+        }
+        return ChestLabelLayout(iconBottom, nameBaseline, timerBaseline, hintBaseline)
+    }
+
     private fun drawChestChip(
         canvas: Canvas,
         r: RectF,
@@ -1118,30 +1165,27 @@ class MenuScreen {
         chestBodyPaint.color = Color.parseColor("#12121C")
         chestStrokePaint.strokeWidth = 2f * s
 
-        val textBand = if (isFeatured && slot != null) 52f * s else 44f * s
         val inner = 4f * s
         val iconTop = r.top + inner
-        val iconBottom = r.bottom - textBand
-        val iconH = (iconBottom - iconTop).coerceAtLeast(28f)
+        val ready = slot != null && slot.isReady(nowMs)
+        val includeHint = (slot == null && isFeatured) || (slot != null && isFeatured && ready)
+        val layout = layoutChestLabels(r, s, iconTop, includeHint)
 
         if (slot == null) {
             chestStrokePaint.color = if (isFeatured) Color.parseColor("#5C6BC0") else Color.parseColor("#3D3D5C")
             canvas.drawRoundRect(r, 12f * s, 12f * s, chestBodyPaint)
             canvas.drawRoundRect(r, 12f * s, 12f * s, chestStrokePaint)
-            tmpRect2.set(r.left + inner, iconTop, r.right - inner, iconTop + iconH)
+            tmpRect2.set(r.left + inner, iconTop, r.right - inner, layout.iconBottom)
             bitmapPaint.alpha = if (isFeatured) 110 else 85
             drawBitmapFit(canvas, menuUi.chest(ChestType.COMMON), tmpRect2)
             bitmapPaint.alpha = 255
-            chestNamePaint.textSize = (12f * s).coerceIn(10f, 16f)
             chestNamePaint.color = Color.parseColor("#616161")
-            canvas.drawText("EMPTY", r.centerX(), r.bottom - (if (isFeatured) 34f else 28f) * s, chestNamePaint)
-            chestTimerPaint.textSize = (r.height() * 0.12f).coerceIn(16f * s, 24f * s)
+            canvas.drawText("EMPTY", r.centerX(), layout.nameBaseline, chestNamePaint)
             chestTimerPaint.color = Color.parseColor("#616161")
-            canvas.drawText("—", r.centerX(), r.bottom - (if (isFeatured) 20f else 9f) * s, chestTimerPaint)
-            if (isFeatured) {
-                chestHintPaint.textSize = 9f * s
+            canvas.drawText("—", r.centerX(), layout.timerBaseline, chestTimerPaint)
+            if (isFeatured && layout.hintBaseline != null) {
                 chestHintPaint.color = Color.argb(200, 158, 158, 180)
-                canvas.drawText("Play to earn", r.centerX(), r.bottom - 6f * s, chestHintPaint)
+                canvas.drawText("Play to earn", r.centerX(), layout.hintBaseline, chestHintPaint)
             }
             if (!isFeatured) {
                 chestDimPaint.color = Color.argb(55, 0, 0, 0)
@@ -1151,7 +1195,6 @@ class MenuScreen {
             return
         }
 
-        val ready = slot.isReady(nowMs)
         val rarityBorder = when (slot.type) {
             ChestType.COMMON -> Color.parseColor("#B0A070")
             ChestType.RARE -> Color.parseColor("#64B5F6")
@@ -1190,7 +1233,7 @@ class MenuScreen {
         chestStrokePaint.color = if (isFeatured) rarityBorder else Color.parseColor("#3D3D5C")
         canvas.drawRoundRect(r, 12f * s, 12f * s, chestStrokePaint)
 
-        tmpRect2.set(r.left + inner, iconTop, r.right - inner, iconTop + iconH)
+        tmpRect2.set(r.left + inner, iconTop, r.right - inner, layout.iconBottom)
         drawBitmapFit(canvas, menuUi.chest(slot.type), tmpRect2)
 
         chestClipPath.reset()
@@ -1209,30 +1252,25 @@ class MenuScreen {
         chestShimmerPaint.shader = null
         canvas.restore()
 
-        chestNamePaint.textSize = (12f * s).coerceIn(10f, 16f)
         chestNamePaint.color = when (slot.type) {
             ChestType.COMMON -> Color.parseColor("#90A4AE")
             ChestType.RARE -> Color.parseColor("#64B5F6")
             ChestType.EPIC -> Color.parseColor("#CE93D8")
             ChestType.SUPER -> Color.parseColor("#FFD54F")
         }
-        val nameY = r.bottom - (if (isFeatured) 34f else 28f) * s
-        canvas.drawText(slot.type.displayName.uppercase(), r.centerX(), nameY, chestNamePaint)
+        canvas.drawText(slot.type.displayName.uppercase(), r.centerX(), layout.nameBaseline, chestNamePaint)
 
-        chestTimerPaint.textSize = (r.height() * 0.12f).coerceIn(16f * s, 24f * s)
         chestTimerPaint.color = if (ready) Color.parseColor("#FFF59D") else Color.parseColor("#B0BEC5")
         val statusLabel = when {
             ready && isFeatured -> "READY"
             ready -> "OPEN"
             else -> formatRemaining(slot.remainingMs(nowMs))
         }
-        val timerY = r.bottom - (if (isFeatured) 20f else 9f) * s
-        canvas.drawText(statusLabel, r.centerX(), timerY, chestTimerPaint)
+        canvas.drawText(statusLabel, r.centerX(), layout.timerBaseline, chestTimerPaint)
 
-        if (isFeatured && ready) {
-            chestHintPaint.textSize = 9f * s
+        if (isFeatured && ready && layout.hintBaseline != null) {
             chestHintPaint.color = Color.argb(220, 200, 200, 220)
-            canvas.drawText("Tap to open", r.centerX(), r.bottom - 5f * s, chestHintPaint)
+            canvas.drawText("Tap to open", r.centerX(), layout.hintBaseline, chestHintPaint)
         }
 
         if (!isFeatured) {

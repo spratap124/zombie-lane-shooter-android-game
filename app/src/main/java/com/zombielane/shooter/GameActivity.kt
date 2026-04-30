@@ -14,11 +14,13 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.zombielane.shooter.ads.AdManager
 import com.zombielane.shooter.engine.GameView
+import com.zombielane.shooter.update.PlayInAppUpdateCoordinator
 
 class GameActivity : AppCompatActivity() {
 
     private lateinit var gameView: GameView
     private lateinit var adManager: AdManager
+    private var playInAppUpdate: PlayInAppUpdateCoordinator? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,6 +58,8 @@ class GameActivity : AppCompatActivity() {
                 }
             }
         })
+
+        playInAppUpdate = PlayInAppUpdateCoordinator(this)
     }
 
     override fun onPause() {
@@ -66,11 +70,14 @@ class GameActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        playInAppUpdate?.onResume()
         gameView.resume()
         adManager.onResume()
     }
 
     override fun onDestroy() {
+        playInAppUpdate?.onDestroy()
+        playInAppUpdate = null
         if (::gameView.isInitialized) {
             gameView.releaseAudio()
         }

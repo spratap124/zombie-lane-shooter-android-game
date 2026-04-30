@@ -8,7 +8,7 @@ import android.graphics.RectF
 import android.graphics.Typeface
 
 /**
- * "Continue?" dialog after death when a rewarded continue is still available this run.
+ * "Game over" dialog after death when a rewarded continue is still available this run.
  */
 class ContinueOfferScreen {
 
@@ -36,6 +36,7 @@ class ContinueOfferScreen {
 
     private val subPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#B0BEC5")
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         textAlign = Paint.Align.CENTER
     }
 
@@ -82,14 +83,14 @@ class ContinueOfferScreen {
         MenuUiAssets.drawBackButton(canvas, backBtnRect, backButton)
 
         val cardW = (safeArea.width() * 0.82f).coerceAtMost(520f * s)
-        val btnH = 52f * s
+        val btnH = 58f * s
         val btnGap = 16f * s
-        val innerPad = 22f * s
-        val titleSubGap = 10f * s
-        val subButtonGap = 22f * s
+        val innerPad = 26f * s
+        val titleSubGap = 12f * s
+        val subButtonGap = 24f * s
 
-        titlePaint.textSize = 44f * s
-        subPaint.textSize = 24f * s
+        titlePaint.textSize = 52f * s
+        subPaint.textSize = 30f * s
         val titleFm = titlePaint.fontMetrics
         val subFm = subPaint.fontMetrics
         val titleBlock = titleFm.descent - titleFm.ascent
@@ -102,7 +103,7 @@ class ContinueOfferScreen {
         canvas.drawRoundRect(card, 20f * s, 20f * s, strokePaint)
 
         var baseline = card.top + innerPad - titleFm.ascent
-        canvas.drawText("Continue?", cx, baseline, titlePaint)
+        canvas.drawText("Game over", cx, baseline, titlePaint)
 
         baseline = baseline + titleFm.descent + titleSubGap - subFm.ascent
         canvas.drawText("Watch a short ad to keep your run", cx, baseline, subPaint)
@@ -112,14 +113,18 @@ class ContinueOfferScreen {
 
         watchAdBtnRect.set(card.centerX() - btnW / 2f, watchTop, card.centerX() + btnW / 2f, watchTop + btnH)
         canvas.drawRoundRect(watchAdBtnRect, 14f * s, 14f * s, if (adReady) watchPaint else watchDisabledPaint)
-        btnTextPaint.textSize = 28f * s
+        btnTextPaint.textSize = 34f * s
         btnTextPaint.color = if (adReady) Color.WHITE else Color.parseColor("#78909C")
-        canvas.drawText(if (adReady) "Watch ad" else "Ad loading…", watchAdBtnRect.centerX(), watchAdBtnRect.centerY() + 10f * s, btnTextPaint)
+        val btnFm = btnTextPaint.fontMetrics
+        val watchBaseline =
+            watchAdBtnRect.centerY() - (btnFm.ascent + btnFm.descent) / 2f
+        canvas.drawText(if (adReady) "continue" else "Ad loading…", watchAdBtnRect.centerX(), watchBaseline, btnTextPaint)
         btnTextPaint.color = Color.WHITE
 
         val noTop = watchTop + btnH + btnGap
         noBtnRect.set(card.centerX() - btnW / 2f, noTop, card.centerX() + btnW / 2f, noTop + btnH)
         canvas.drawRoundRect(noBtnRect, 14f * s, 14f * s, noPaint)
-        canvas.drawText("No", noBtnRect.centerX(), noBtnRect.centerY() + 10f * s, btnTextPaint)
+        val noBaseline = noBtnRect.centerY() - (btnFm.ascent + btnFm.descent) / 2f
+        canvas.drawText("No", noBtnRect.centerX(), noBaseline, btnTextPaint)
     }
 }
