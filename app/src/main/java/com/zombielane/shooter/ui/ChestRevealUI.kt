@@ -24,7 +24,11 @@ class ChestRevealUI {
 
     private val rewardBackground = ChestRewardBackgroundSystem()
     private val cardFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#661E1B4B")
+        color = Color.parseColor("#CC1A2332")
+        style = Paint.Style.FILL
+    }
+    private val subtitleBackingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#99000000")
         style = Paint.Style.FILL
     }
     private val cardStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -131,38 +135,57 @@ class ChestRevealUI {
             }
             ChestRevealPhase.DOUBLE_OFFER -> {
                 rewardBackground.draw(canvas, w, h, now, rewardBackground.visualForTier(tier))
-                drawChestHero(canvas, menuUi, tier, cx, safeArea.top + 56f * s, 118f * s)
+                val heroTop = safeArea.top + 72f * s
+                drawChestHero(canvas, menuUi, tier, cx, heroTop, 122f * s)
 
-                titlePaint.textSize = 48f * s
+                val titleBaseline = heroTop + 122f * s + 36f * s
+                titlePaint.textSize = 56f * s
                 titlePaint.color = Color.WHITE
-                titlePaint.setShadowLayer(14f * s, 0f, 4f * s, Color.argb(220, glowRgb.first, glowRgb.second, glowRgb.third))
-                canvas.drawText("DOUBLE THE LOOT?", cx, safeArea.top + 210f * s, titlePaint)
+                titlePaint.setShadowLayer(18f * s, 0f, 5f * s, Color.argb(235, 12, 14, 22))
+                canvas.drawText("DOUBLE THE LOOT?", cx, titleBaseline, titlePaint)
                 titlePaint.clearShadowLayer()
 
-                subPaint.color = Color.parseColor("#CFD8DC")
-                subPaint.textSize = 24f * s
-                canvas.drawText("Watch a short video to multiply this drop ×2", cx, safeArea.top + 258f * s, subPaint)
+                val subText = "Watch a short video to multiply this drop ×2"
+                subPaint.textSize = 30f * s
+                subPaint.color = Color.parseColor("#FFFDE7")
+                val subFm = subPaint.fontMetrics
+                subPaint.setShadowLayer(10f * s, 0f, 3f * s, Color.argb(230, 0, 0, 0))
+                val subBaseline = titleBaseline + 52f * s
+                val subW = subPaint.measureText(subText)
+                val pillPadX = 20f * s
+                val pillPadY = 12f * s
+                tmpInner.set(
+                    cx - subW / 2f - pillPadX,
+                    subBaseline + subFm.ascent - pillPadY,
+                    cx + subW / 2f + pillPadX,
+                    subBaseline + subFm.descent + pillPadY
+                )
+                canvas.drawRoundRect(tmpInner, 16f * s, 16f * s, subtitleBackingPaint)
+                canvas.drawText(subText, cx, subBaseline, subPaint)
+                subPaint.clearShadowLayer()
 
-                layoutRewardCard(canvas, cx, h * 0.33f, w * 0.88f, s, tier, accent, menuUi, result.rewards, now)
+                val cardTop = subBaseline + subFm.descent + 28f * s
+                layoutRewardCard(canvas, cx, cardTop, w * 0.88f, s, tier, accent, menuUi, result.rewards, now)
 
-                val bw = safeArea.width() * 0.42f
-                val bh = 64f * s
-                val gap = 14f * s
-                val btnY = h * 0.62f
+                val bw = safeArea.width() * 0.44f
+                val bh = 86f * s
+                val gap = 16f * s
+                val btnTopMax = safeArea.bottom - bh - 20f * s
+                val btnY = minOf(h * 0.62f, btnTopMax - 8f * s)
                 val pulse = (sin(now * 0.007) * 0.5f + 0.5f).toFloat()
-                val adExpand = 4f * pulse * s
+                val adExpand = 5f * pulse * s
                 doubleAdRect.set(cx - bw - gap / 2f - adExpand, btnY - adExpand, cx - gap / 2f + adExpand, btnY + bh + adExpand)
                 claimRect.set(cx + gap / 2f, btnY, cx + bw + gap / 2f, btnY + bh)
 
                 drawArcadeButton(
                     canvas, doubleAdRect, s, now, 0f,
-                    Color.parseColor("#FF9100"), Color.parseColor("#E65100"),
-                    Triple(255, 193, 7), "×2  AD"
+                    Color.parseColor("#FFA726"), Color.parseColor("#E65100"),
+                    Triple(255, 213, 79), "×2  AD"
                 )
                 drawArcadeButton(
                     canvas, claimRect, s, now, 2.5f,
-                    Color.parseColor("#546E7A"), Color.parseColor("#263238"),
-                    Triple(144, 164, 174), "CLAIM"
+                    Color.parseColor("#455A64"), Color.parseColor("#1C2529"),
+                    Triple(179, 229, 252), "CLAIM"
                 )
             }
             else -> {}
@@ -201,8 +224,8 @@ class ChestRevealUI {
     ) {
         val pad = 22f * s
         var contentH = pad * 2f
-        val rowGap = 14f * s
-        val rowH = 40f * s
+        val rowGap = 16f * s
+        val rowH = 48f * s
         if (rewards.coins > 0) contentH += rowH + rowGap
         rewards.tempShooter?.let { contentH += rowH + rowGap }
         if (rewards.nextRunShield) contentH += rowH + rowGap
@@ -214,7 +237,7 @@ class ChestRevealUI {
 
         val rgb = tierGlowRgb(tier)
         cardStrokePaint.color = Color.argb(200, rgb.first, rgb.second, rgb.third)
-        cardStrokePaint.strokeWidth = 2.5f * s
+        cardStrokePaint.strokeWidth = 3f * s
         canvas.drawRoundRect(cardRect, 20f * s, 20f * s, cardFillPaint)
         canvas.drawRoundRect(cardRect, 20f * s, 20f * s, cardStrokePaint)
 
@@ -222,15 +245,15 @@ class ChestRevealUI {
         val textLeft = cardRect.left + pad
         val maxTextW = cardRect.width() - pad * 2f - 48f * s
 
-        rewardLinePaint.textSize = 30f * s
+        rewardLinePaint.textSize = 36f * s
         if (rewards.coins > 0) {
             val coinBmp = menuUi.coin
-            val ch = 36f * s
+            val ch = 40f * s
             val scale = ch / coinBmp.height
             val cw = coinBmp.width * scale
             tmpBitmapDst.set(textLeft, y - ch * 0.85f, textLeft + cw, y + ch * 0.15f)
             canvas.drawBitmap(coinBmp, null, tmpBitmapDst, bitmapPaint)
-            rewardLinePaint.color = Color.parseColor("#FFD54F")
+            rewardLinePaint.color = Color.parseColor("#FFCA28")
             val label = "+${rewards.coins}  COINS"
             canvas.drawText(label, textLeft + cw + 12f * s, y, rewardLinePaint)
             y += rowH + rowGap
@@ -238,7 +261,7 @@ class ChestRevealUI {
         rewards.tempShooter?.let { st ->
             val name = Shooter.get(st).name
             val mins = (rewards.tempShooterDurationMs / 60000).coerceAtLeast(1)
-            rewardLinePaint.color = Color.parseColor("#80CBC4")
+            rewardLinePaint.color = Color.parseColor("#4DD0E1")
             val line = "⚡ $name  ·  ${mins}m trial"
             drawEllipsized(canvas, line, textLeft, y, maxTextW, rewardLinePaint)
             y += rowH + rowGap
@@ -300,23 +323,24 @@ class ChestRevealUI {
             rect.left, rect.top, rect.left, rect.bottom,
             topColor, bottomColor, Shader.TileMode.CLAMP
         )
-        canvas.drawRoundRect(rect, 12f * s, 12f * s, arcadeBtnFill)
+        canvas.drawRoundRect(rect, 16f * s, 16f * s, arcadeBtnFill)
         arcadeBtnFill.shader = null
 
-        arcadeBtnRim.color = Color.argb(200, 255, 255, 255)
-        arcadeBtnRim.strokeWidth = 2f * s
-        canvas.drawRoundRect(rect, 12f * s, 12f * s, arcadeBtnRim)
+        arcadeBtnRim.color = Color.argb(220, 255, 255, 255)
+        arcadeBtnRim.strokeWidth = 2.5f * s
+        canvas.drawRoundRect(rect, 16f * s, 16f * s, arcadeBtnRim)
 
-        arcadeBtnRim.color = Color.argb(90, 0, 0, 0)
-        arcadeBtnRim.strokeWidth = 1f * s
-        tmpInner.set(rect.left + 3f * s, rect.top + 3f * s, rect.right - 3f * s, rect.bottom - 3f * s)
-        canvas.drawRoundRect(tmpInner, 9f * s, 9f * s, arcadeBtnRim)
+        arcadeBtnRim.color = Color.argb(100, 0, 0, 0)
+        arcadeBtnRim.strokeWidth = 1.2f * s
+        tmpInner.set(rect.left + 4f * s, rect.top + 4f * s, rect.right - 4f * s, rect.bottom - 4f * s)
+        canvas.drawRoundRect(tmpInner, 12f * s, 12f * s, arcadeBtnRim)
 
         val rw = rect.width().coerceAtLeast(1f)
-        btnLabelPaint.textSize = (rw * 0.065f).coerceIn(22f * s, 36f)
+        btnLabelPaint.textSize = (rw * 0.078f).coerceIn(28f * s, 44f * s)
         btnLabelPaint.color = Color.WHITE
-        btnLabelPaint.setShadowLayer(4f * s, 0f, 2f * s, Color.parseColor("#80000000"))
-        canvas.drawText(label, rect.centerX(), rect.centerY() + btnLabelPaint.textSize * 0.35f, btnLabelPaint)
+        btnLabelPaint.setShadowLayer(5f * s, 0f, 2.5f * s, Color.parseColor("#B0000000"))
+        val btnFm = btnLabelPaint.fontMetrics
+        canvas.drawText(label, rect.centerX(), rect.centerY() - (btnFm.ascent + btnFm.descent) / 2f, btnLabelPaint)
         btnLabelPaint.clearShadowLayer()
     }
 }
