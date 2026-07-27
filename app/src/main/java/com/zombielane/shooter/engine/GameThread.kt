@@ -10,7 +10,6 @@ class GameThread(
 
     companion object {
         const val TARGET_FPS = 60
-        private const val FRAME_PERIOD_MS = 1000.0 / TARGET_FPS
     }
 
     @Volatile
@@ -70,7 +69,8 @@ class GameThread(
             }
 
             elapsed = System.currentTimeMillis() - startTime
-            sleepTime = (FRAME_PERIOD_MS - elapsed).toLong()
+            val framePeriod = gameView.targetFramePeriodMs().toDouble().coerceIn(1.0, 500.0)
+            sleepTime = (framePeriod - elapsed).toLong()
 
             if (sleepTime > 0) {
                 try {
