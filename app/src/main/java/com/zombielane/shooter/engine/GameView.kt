@@ -423,6 +423,26 @@ class GameView(context: Context) : SurfaceView(context), SurfaceHolder.Callback 
 
     // ── UPDATE ──────────────────────────────────────────────
 
+    /**
+     * Milliseconds between frames for [GameThread]. Full FPS during combat and short animations;
+     * lower FPS on menu/settings/shop so an idle foreground session does not sustain ~60Hz redraw
+     * (reduces heat and battery drain when the player leaves the app open).
+     */
+    fun targetFramePeriodMs(): Long {
+        return when (state) {
+            GameState.PLAYING -> 16L
+            GameState.PAUSED -> 33L
+            GameState.GAME_OVER, GameState.CONTINUE_OFFER -> 33L
+            GameState.CHESTS -> when (chestRevealPhase) {
+                ChestRevealPhase.SPINNING -> 16L
+                ChestRevealPhase.REVEAL, ChestRevealPhase.LUCKY -> 22L
+                ChestRevealPhase.DOUBLE_OFFER -> 33L
+                else -> 50L
+            }
+            else -> 50L
+        }
+    }
+
     fun update() {
         updateFps()
 
