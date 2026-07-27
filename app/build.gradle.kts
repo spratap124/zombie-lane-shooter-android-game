@@ -33,7 +33,7 @@ val releaseWorkRequested: Boolean =
 
 android {
     namespace = "com.zombielane.shooter"
-    compileSdk = 35
+    compileSdk = 36
 
     buildFeatures {
         buildConfig = true
@@ -44,9 +44,9 @@ android {
     defaultConfig {
         applicationId = "com.zombielane.shooter"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 14
-        versionName = "1.1.2"
+        targetSdk = 36
+        versionCode = 15
+        versionName = "1.1.3"
 
         // Debug / local: admob.*.id.test in local.properties (see release for production).
         manifestPlaceholders["admobApplicationId"] = admobTestApplicationId
